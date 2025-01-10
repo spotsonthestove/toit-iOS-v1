@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BED9A79F2D2F16BF0046D6A0 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BED9A79D2D2F16BF0046D6A0 /* Metal.framework */; };
+		BED9A7A02D2F16BF0046D6A0 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BED9A79E2D2F16BF0046D6A0 /* MetalKit.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		BED9A5972D2E73910046D6A0 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +32,8 @@
 		BED9A5822D2E738E0046D6A0 /* toit-iOS-v1.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "toit-iOS-v1.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BED9A5962D2E73910046D6A0 /* toit-iOS-v1Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "toit-iOS-v1Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BED9A5A02D2E73910046D6A0 /* toit-iOS-v1UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "toit-iOS-v1UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BED9A79D2D2F16BF0046D6A0 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		BED9A79E2D2F16BF0046D6A0 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -65,6 +72,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BED9A79F2D2F16BF0046D6A0 /* Metal.framework in Frameworks */,
+				BED9A7A02D2F16BF0046D6A0 /* MetalKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +100,7 @@
 				BED9A5842D2E738E0046D6A0 /* toit-iOS-v1 */,
 				BED9A5992D2E73910046D6A0 /* toit-iOS-v1Tests */,
 				BED9A5A32D2E73910046D6A0 /* toit-iOS-v1UITests */,
+				BED9A79C2D2F16BE0046D6A0 /* Frameworks */,
 				BED9A5832D2E738E0046D6A0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -103,6 +113,15 @@
 				BED9A5A02D2E73910046D6A0 /* toit-iOS-v1UITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		BED9A79C2D2F16BE0046D6A0 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				BED9A79D2D2F16BF0046D6A0 /* Metal.framework */,
+				BED9A79E2D2F16BF0046D6A0 /* MetalKit.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
