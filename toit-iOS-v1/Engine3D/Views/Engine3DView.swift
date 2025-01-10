@@ -11,6 +11,7 @@ struct Engine3DView: View {
             MetalViewRepresentable(metalView: metalView, renderer: $renderer)
                 .onAppear {
                     setupRenderer()
+                    createInitialScene()
                 }
             
             // Debug controls overlay
@@ -42,14 +43,38 @@ struct Engine3DView: View {
     }
     
     private func addNode() {
-        guard let renderer = renderer else { return }
+        guard let renderer = renderer else {
+            print("❌ Cannot add node - renderer is nil")
+            return 
+        }
         let position = SIMD3<Float>(0, 0, 0)
         let node = Engine3DSceneNode(position: position)
+        node.setupGeometry(device: renderer.device)
         renderer.scene.addNode(node)
+        print("✅ Added node. Total nodes: \(renderer.scene.nodes.count)")
     }
     
     private func connectNodes() {
         // TODO: Implement node connection logic
+    }
+    
+    private func createInitialScene() {
+        guard let renderer = renderer else { return }
+        
+        // Create a test node at the center
+        let centerNode = Engine3DSceneNode(position: SIMD3<Float>(0, 0, 0))
+        centerNode.setupGeometry(device: renderer.device)
+        renderer.scene.addNode(centerNode)
+        
+        // Create a second node offset to the right
+        let rightNode = Engine3DSceneNode(position: SIMD3<Float>(1, 0, 0))
+        rightNode.setupGeometry(device: renderer.device)
+        renderer.scene.addNode(rightNode)
+        
+        // Create a branch between them if your Engine3DSceneNode has connect functionality
+        if let branch = centerNode.connect(to: rightNode, device: renderer.device) {
+            renderer.scene.addBranch(branch)
+        }
     }
 }
 
@@ -63,6 +88,14 @@ struct MetalViewRepresentable: UIViewRepresentable {
     
     func makeUIView(context: Context) -> MTKView {
         metalView.delegate = renderer
+        
+        metalView.clearColor = MTLClearColor(red: 0.2, green: 0.2, blue: 0.2, alpha: 1.0)
+        metalView.depthStencilPixelFormat = .depth32Float
+        metalView.colorPixelFormat = .bgra8Unorm
+        metalView.sampleCount = 1
+        metalView.enableSetNeedsDisplay = true
+        metalView.isPaused = false
+        metalView.preferredFramesPerSecond = 60
         
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, 
                                                action: #selector(Coordinator.handleTap(_:)))

@@ -1,41 +1,31 @@
 import Metal
 import simd
 
-class Engine3DBranch {
-    private weak var startNode: Engine3DSceneNode?
-    private weak var endNode: Engine3DSceneNode?
-    private var geometry: BranchGeometry
-    private var vertexBuffer: MTLBuffer?
-    private var indexBuffer: MTLBuffer?
-    private var uniformsBuffer: MTLBuffer?
+class Engine3DBranch: Hashable {
+    weak var startNode: Engine3DSceneNode?
+    weak var endNode: Engine3DSceneNode?
+    var vertexBuffer: MTLBuffer?
+    var vertexCount: Int
     
-    init(from startNode: Engine3DSceneNode, to endNode: Engine3DSceneNode, device: MTLDevice) {
+    init(startNode: Engine3DSceneNode, endNode: Engine3DSceneNode, vertexBuffer: MTLBuffer, vertexCount: Int) {
         self.startNode = startNode
         self.endNode = endNode
-        self.geometry = BranchGeometry(radius: 0.05, radialSegments: 8)
-        
-        updateGeometry(device: device)
+        self.vertexBuffer = vertexBuffer
+        self.vertexCount = vertexCount
     }
     
-    func updateGeometry(device: MTLDevice) {
-        guard let startNode = startNode, let endNode = endNode else { return }
-        
-        geometry.updateGeometry(from: startNode, to: endNode)
-        
-        vertexBuffer = device.makeBuffer(
-            bytes: geometry.vertices,
-            length: geometry.vertices.count * MemoryLayout<Engine3DVertex>.stride,
-            options: []
-        )
-        
-        indexBuffer = device.makeBuffer(
-            bytes: geometry.indices,
-            length: geometry.indices.count * MemoryLayout<UInt16>.stride,
-            options: []
-        )
+    // Required for Hashable
+    static func == (lhs: Engine3DBranch, rhs: Engine3DBranch) -> Bool {
+        return lhs.startNode === rhs.startNode && 
+               lhs.endNode === rhs.endNode
     }
     
-    func isConnectedTo(_ node: Engine3DSceneNode) -> Bool {
-        return startNode === node || endNode === node
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(ObjectIdentifier(self))
+    }
+    
+    var modelMatrix: simd_float4x4 {
+        // For branches, we use identity matrix as the vertices are in world space
+        return matrix_identity_float4x4
     }
 } 

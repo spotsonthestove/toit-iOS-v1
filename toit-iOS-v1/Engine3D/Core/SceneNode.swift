@@ -28,6 +28,15 @@ class Engine3DSceneNode: Hashable {
     var isDeleted: Bool
     var needsSync: Bool
     
+    // Add these properties to Engine3DSceneNode
+    var vertexBuffer: MTLBuffer?
+    var vertexCount: Int = 0
+    
+    // Add this computed property to Engine3DSceneNode
+    var modelMatrix: simd_float4x4 {
+        return worldMatrix  // Using worldMatrix as the model matrix
+    }
+    
     init(id: UUID = UUID(), title: String = "", position: SIMD3<Float>) {
         self.id = id
         self.title = title
@@ -95,5 +104,66 @@ class Engine3DSceneNode: Hashable {
     
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
+    }
+    
+    // Add these methods
+    func setupGeometry(device: MTLDevice) {
+        // Create a simple cube or sphere geometry for visualization
+        let vertices: [Vertex] = [
+            // Front face - triangle 1
+            Vertex(position: SIMD3<Float>(-0.1, -0.1, 0.1), 
+                  normal: SIMD3<Float>(0, 0, 1),   // Front-facing normal
+                  color: SIMD4<Float>(1, 0, 0, 1)),
+            Vertex(position: SIMD3<Float>(0.1, -0.1, 0.1), 
+                  normal: SIMD3<Float>(0, 0, 1),
+                  color: SIMD4<Float>(1, 0, 0, 1)),
+            Vertex(position: SIMD3<Float>(0.1, 0.1, 0.1), 
+                  normal: SIMD3<Float>(0, 0, 1),
+                  color: SIMD4<Float>(1, 0, 0, 1)),
+            
+            // Front face - triangle 2
+            Vertex(position: SIMD3<Float>(-0.1, -0.1, 0.1), 
+                  normal: SIMD3<Float>(0, 0, 1),
+                  color: SIMD4<Float>(1, 0, 0, 1)),
+            Vertex(position: SIMD3<Float>(0.1, 0.1, 0.1), 
+                  normal: SIMD3<Float>(0, 0, 1),
+                  color: SIMD4<Float>(1, 0, 0, 1)),
+            Vertex(position: SIMD3<Float>(-0.1, 0.1, 0.1), 
+                  normal: SIMD3<Float>(0, 0, 1),
+                  color: SIMD4<Float>(1, 0, 0, 1)),
+        ]
+        
+        let bufferSize = vertices.count * MemoryLayout<Vertex>.stride
+        vertexBuffer = device.makeBuffer(bytes: vertices, length: bufferSize, options: [])
+        vertexCount = vertices.count
+    }
+    
+    func connect(to node: Engine3DSceneNode, device: MTLDevice) -> Engine3DBranch? {
+        print("📊 Creating branch from \(position) to \(node.position)")
+        
+        let vertices = [
+            Vertex(position: self.position, 
+                  normal: SIMD3<Float>(0, 1, 0),  // Up vector as default normal
+                  color: SIMD4<Float>(1, 1, 1, 1)),
+            Vertex(position: node.position, 
+                  normal: SIMD3<Float>(0, 1, 0),
+                  color: SIMD4<Float>(1, 1, 1, 1))
+        ]
+        
+        let bufferSize = vertices.count * MemoryLayout<Vertex>.stride
+        guard let vertexBuffer = device.makeBuffer(bytes: vertices, length: bufferSize, options: []) else {
+            print("❌ Failed to create vertex buffer for branch")
+            return nil
+        }
+        
+        let branch = Engine3DBranch(
+            startNode: self,
+            endNode: node,
+            vertexBuffer: vertexBuffer,
+            vertexCount: vertices.count
+        )
+        
+        print("✅ Branch created successfully")
+        return branch
     }
 } 

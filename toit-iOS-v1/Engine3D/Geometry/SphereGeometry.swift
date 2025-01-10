@@ -2,7 +2,7 @@ import Metal
 import simd
 
 class SphereGeometry {
-    private(set) var vertices: [Engine3DVertex] = []
+    private(set) var vertices: [Vertex] = []
     private(set) var indices: [UInt16] = []
     
     init(radius: Float, segments: Int = 16) {
@@ -32,9 +32,10 @@ class SphereGeometry {
                 let position = SIMD3<Float>(x, y, z)
                 let normal = normalize(position) // For a sphere, normal is normalized position
                 
-                vertices.append(Engine3DVertex(
+                vertices.append(Vertex(
                     position: position,
-                    normal: normal
+                    normal: normal,
+                    color: SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
                 ))
             }
         }

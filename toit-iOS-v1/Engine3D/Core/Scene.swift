@@ -22,8 +22,7 @@ class Engine3DScene {
         nodes.remove(node)
         // Remove any branches connected to this node
         branches.removeAll { branch in
-            // TODO: Implement branch connection check
-            false
+            return branch.startNode === node || branch.endNode === node
         }
         print("Removed node: \(node.id) from scene. Remaining nodes: \(nodes.count)")
     }

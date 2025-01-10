@@ -52,7 +52,8 @@ class BranchGeometry {
                 let normal = normalize(rotatedPoint)
                 vertices.append(Vertex(
                     position: point,
-                    normal: normal
+                    normal: normal,
+                    color: SIMD4<Float>(0.6, 0.6, 0.6, 1.0)
                 ))
             }
         }
