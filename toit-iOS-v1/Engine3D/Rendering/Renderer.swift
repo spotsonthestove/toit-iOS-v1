@@ -23,9 +23,10 @@ class Renderer: NSObject, MTKViewDelegate {
     let camera: Camera
     
     // Debug state
-    private var isDebugEnabled: Bool = false
-    private var debugLineRenderer: DebugLineRenderer?
+    var isDebugEnabled: Bool = false
+    var debugLineRenderer: DebugLineRenderer?
     private var pendingDebugLines: [(start: SIMD3<Float>, end: SIMD3<Float>, color: SIMD4<Float>)] = []
+    private var persistentDebugLines: [(start: SIMD3<Float>, end: SIMD3<Float>, color: SIMD4<Float>)] = []
     
     // Uniforms buffer
     private var uniformsBuffer: MTLBuffer?
@@ -41,9 +42,9 @@ class Renderer: NSObject, MTKViewDelegate {
         self.commandQueue = commandQueue
         self.scene = Engine3DScene()
         
-        // Initialize camera with better default position
+        // Initialize camera with default position
         self.camera = Camera(
-            position: SIMD3<Float>(0, 2, 5),  // Moved closer and lower
+            position: SIMD3<Float>(0, 0, -5),
             target: SIMD3<Float>(0, 0, 0)
         )
         
@@ -57,9 +58,10 @@ class Renderer: NSObject, MTKViewDelegate {
         metalView.clearColor = MTLClearColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0)
         metalView.colorPixelFormat = .bgra8Unorm
         metalView.sampleCount = 1
+        metalView.preferredFramesPerSecond = 30  // Reduced from 60 to make debug visuals more visible
         
         setupRenderer(metalView)
-        print("✅ Renderer initialized successfully")
+        print("✅ Renderer initialized with camera at: \(camera.position)")
         debugPrintSceneState()
     }
     
@@ -106,7 +108,13 @@ class Renderer: NSObject, MTKViewDelegate {
     }
     
     private func setupDebugRenderer() {
+        print("🔧 Setting up debug line renderer")
         debugLineRenderer = DebugLineRenderer(device: device)
+        if debugLineRenderer != nil {
+            print("✅ Debug line renderer created successfully")
+        } else {
+            print("❌ Failed to create debug line renderer")
+        }
     }
     
     // MARK: - MTKViewDelegate
@@ -230,24 +238,53 @@ class Renderer: NSObject, MTKViewDelegate {
         guard let debugLineRenderer = debugLineRenderer else { return }
         
         // Add any pending debug lines
-        for line in pendingDebugLines {
+        if !pendingDebugLines.isEmpty {
+            for line in pendingDebugLines {
+                debugLineRenderer.addLine(start: line.start, end: line.end, color: line.color)
+                persistentDebugLines.append(line)  // Store for persistence
+            }
+            print("📊 Added \(pendingDebugLines.count) new debug lines")
+            pendingDebugLines.removeAll()
+        }
+        
+        // Re-add all persistent lines each frame
+        for line in persistentDebugLines {
             debugLineRenderer.addLine(start: line.start, end: line.end, color: line.color)
         }
-        pendingDebugLines.removeAll()
         
-        // Update and render debug lines
+        // Update and render all debug lines
         debugLineRenderer.updateBuffers()
         debugLineRenderer.render(encoder: encoder, viewMatrix: viewMatrix, projectionMatrix: projectionMatrix)
     }
     
     // Debug methods
     func enableDebugVisualization(_ enabled: Bool) {
+        print("🎨 Debug visualization \(enabled ? "enabled" : "disabled")")
         isDebugEnabled = enabled
-        if !enabled {
-            debugLineRenderer?.clear()
-            pendingDebugLines.removeAll()
+        if enabled {
+            // Draw initial debug axes when enabled
+            drawDebugAxes(length: 5.0)
+        } else {
+            clearDebugLines()
         }
-        print("Debug visualization \(enabled ? "enabled" : "disabled")")
+    }
+    
+    func clearDebugLines() {
+        print("🧹 Clearing debug lines")
+        debugLineRenderer?.clear()
+        pendingDebugLines.removeAll()
+        persistentDebugLines.removeAll()
+    }
+    
+    func restoreDebugLines() {
+        print("🔄 Restoring persistent debug lines")
+        guard let debugLineRenderer = debugLineRenderer else { return }
+        
+        // Re-add all persistent lines
+        for line in persistentDebugLines {
+            debugLineRenderer.addLine(start: line.start, end: line.end, color: line.color)
+        }
+        debugLineRenderer.updateBuffers()
     }
     
     func debugDrawLine(start: SIMD3<Float>, end: SIMD3<Float>, color: SIMD4<Float>) {
@@ -259,25 +296,25 @@ class Renderer: NSObject, MTKViewDelegate {
         guard isDebugEnabled else { return }
         let origin = SIMD3<Float>(0, 0, 0)
         
-        // X axis (red)
+        // X axis (bright red)
         debugDrawLine(
             start: origin,
             end: SIMD3<Float>(length, 0, 0),
-            color: SIMD4<Float>(1, 0, 0, 1)
+            color: SIMD4<Float>(1, 0.2, 0.2, 1)  // Brighter red
         )
         
-        // Y axis (green)
+        // Y axis (bright green)
         debugDrawLine(
             start: origin,
             end: SIMD3<Float>(0, length, 0),
-            color: SIMD4<Float>(0, 1, 0, 1)
+            color: SIMD4<Float>(0.2, 1, 0.2, 1)  // Brighter green
         )
         
-        // Z axis (blue)
+        // Z axis (bright blue)
         debugDrawLine(
             start: origin,
             end: SIMD3<Float>(0, 0, length),
-            color: SIMD4<Float>(0, 0, 1, 1)
+            color: SIMD4<Float>(0.2, 0.2, 1, 1)  // Brighter blue
         )
     }
     
@@ -297,5 +334,75 @@ class Renderer: NSObject, MTKViewDelegate {
         print("  - Position: \(camera.position)")
         print("  - Target: \(camera.target)")
         camera.debugPrintCameraMatrix()
+    }
+    
+    func debugDrawSphere(center: SIMD3<Float>, radius: Float, color: SIMD4<Float>) {
+        guard isDebugEnabled else { return }
+        
+        // Draw three circles to represent the sphere
+        let segments = 32
+        let angleStep = 2.0 * Float.pi / Float(segments)
+        
+        // Make the color more visible
+        let brightColor = SIMD4<Float>(
+            min(color.x + 0.3, 1.0),  // Increase brightness
+            min(color.y + 0.3, 1.0),
+            min(color.z + 0.3, 1.0),
+            0.8  // More opaque
+        )
+        
+        // XY plane circle
+        for i in 0...segments {
+            let angle = Float(i) * angleStep
+            let nextAngle = Float(i + 1) * angleStep
+            
+            let start = center + SIMD3<Float>(
+                radius * cos(angle),
+                radius * sin(angle),
+                0
+            )
+            let end = center + SIMD3<Float>(
+                radius * cos(nextAngle),
+                radius * sin(nextAngle),
+                0
+            )
+            debugDrawLine(start: start, end: end, color: brightColor)
+        }
+        
+        // XZ plane circle
+        for i in 0...segments {
+            let angle = Float(i) * angleStep
+            let nextAngle = Float(i + 1) * angleStep
+            
+            let start = center + SIMD3<Float>(
+                radius * cos(angle),
+                0,
+                radius * sin(angle)
+            )
+            let end = center + SIMD3<Float>(
+                radius * cos(nextAngle),
+                0,
+                radius * sin(nextAngle)
+            )
+            debugDrawLine(start: start, end: end, color: brightColor)
+        }
+        
+        // YZ plane circle
+        for i in 0...segments {
+            let angle = Float(i) * angleStep
+            let nextAngle = Float(i + 1) * angleStep
+            
+            let start = center + SIMD3<Float>(
+                0,
+                radius * cos(angle),
+                radius * sin(angle)
+            )
+            let end = center + SIMD3<Float>(
+                0,
+                radius * cos(nextAngle),
+                radius * sin(nextAngle)
+            )
+            debugDrawLine(start: start, end: end, color: brightColor)
+        }
     }
 } 

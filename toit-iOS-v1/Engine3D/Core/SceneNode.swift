@@ -28,12 +28,20 @@ class Engine3DSceneNode: Hashable {
     var isDeleted: Bool
     var needsSync: Bool
     
+    // Selection state
+    private(set) var isSelected: Bool = false
+    private var originalColor: SIMD4<Float>
+    
     // Add these properties to Engine3DSceneNode
     var vertexBuffer: MTLBuffer?
     var vertexCount: Int = 0
     
-    // Add color property
-    var color: SIMD4<Float>
+    // Add color property with didSet to update vertex buffer
+    var color: SIMD4<Float> {
+        didSet {
+            updateVertexColors()
+        }
+    }
     
     // Add this computed property to Engine3DSceneNode
     var modelMatrix: simd_float4x4 {
@@ -52,6 +60,7 @@ class Engine3DSceneNode: Hashable {
         self.isDeleted = false
         self.needsSync = true
         self.color = color
+        self.originalColor = color
         
         self.localMatrix = matrix_identity_float4x4
         self.worldMatrix = matrix_identity_float4x4
@@ -169,5 +178,49 @@ class Engine3DSceneNode: Hashable {
         
         print("✅ Branch created successfully")
         return branch
+    }
+    
+    // MARK: - Selection Methods
+    
+    func select() {
+        guard !isSelected else { return }
+        isSelected = true
+        originalColor = color
+        color = SIMD4<Float>(1.0, 0.6, 0.0, 1.0) // Highlight color (orange)
+        print("📌 Node selected: \(id)")
+    }
+    
+    func deselect() {
+        guard isSelected else { return }
+        isSelected = false
+        color = originalColor
+        print("🔄 Node deselected: \(id)")
+    }
+    
+    private func updateVertexColors() {
+        guard let device = vertexBuffer?.device,
+              vertexCount > 0 else { return }
+        
+        // Create new vertices with updated color
+        var vertices: [Vertex] = []
+        for i in 0..<vertexCount {
+            if let vertex = getVertex(at: i) {
+                var updatedVertex = vertex
+                updatedVertex.color = color
+                vertices.append(updatedVertex)
+            }
+        }
+        
+        // Create new buffer with updated vertices
+        let bufferSize = vertices.count * MemoryLayout<Vertex>.stride
+        vertexBuffer = device.makeBuffer(bytes: vertices, length: bufferSize, options: [])
+    }
+    
+    private func getVertex(at index: Int) -> Vertex? {
+        guard let buffer = vertexBuffer,
+              index < vertexCount else { return nil }
+        
+        let vertices = buffer.contents().bindMemory(to: Vertex.self, capacity: vertexCount)
+        return vertices[index]
     }
 } 
