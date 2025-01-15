@@ -5,6 +5,11 @@ struct Uniforms {
     var modelMatrix: float4x4
     var viewMatrix: float4x4
     var projectionMatrix: float4x4
+    var normalMatrix: float4x4
+    var color: SIMD4<Float>
+    var lightPosition: SIMD3<Float>
+    var ambientIntensity: Float
+    var diffuseIntensity: Float
 }
 
 class Renderer: NSObject, MTKViewDelegate {
@@ -15,7 +20,12 @@ class Renderer: NSObject, MTKViewDelegate {
     private var depthState: MTLDepthStencilState?
     
     // Camera
-    private let camera: Camera
+    let camera: Camera
+    
+    // Debug state
+    private var isDebugEnabled: Bool = false
+    private var debugLineRenderer: DebugLineRenderer?
+    private var pendingDebugLines: [(start: SIMD3<Float>, end: SIMD3<Float>, color: SIMD4<Float>)] = []
     
     // Uniforms buffer
     private var uniformsBuffer: MTLBuffer?
@@ -57,6 +67,7 @@ class Renderer: NSObject, MTKViewDelegate {
         setupPipelineState(metalView)
         setupDepthState()
         setupUniformsBuffer()
+        setupDebugRenderer()
     }
     
     private func setupPipelineState(_ metalView: MTKView) {
@@ -90,7 +101,12 @@ class Renderer: NSObject, MTKViewDelegate {
     
     private func setupUniformsBuffer() {
         let uniformsSize = MemoryLayout<Uniforms>.stride
-        uniformsBuffer = device.makeBuffer(length: uniformsSize * 100, options: [])
+        let alignedUniformsSize = (uniformsSize + 0xFF) & ~0xFF  // Align to 256 bytes
+        uniformsBuffer = device.makeBuffer(length: alignedUniformsSize * 100, options: [])
+    }
+    
+    private func setupDebugRenderer() {
+        debugLineRenderer = DebugLineRenderer(device: device)
     }
     
     // MARK: - MTKViewDelegate
@@ -118,6 +134,20 @@ class Renderer: NSObject, MTKViewDelegate {
         let viewMatrix = camera.viewMatrix
         let projectionMatrix = camera.projectionMatrix
         
+        // Render scene objects
+        renderSceneObjects(encoder: encoder, viewMatrix: viewMatrix, projectionMatrix: projectionMatrix)
+        
+        // Render debug lines if enabled
+        if isDebugEnabled {
+            renderDebugLines(encoder: encoder, viewMatrix: viewMatrix, projectionMatrix: projectionMatrix)
+        }
+        
+        encoder.endEncoding()
+        commandBuffer.present(drawable)
+        commandBuffer.commit()
+    }
+    
+    private func renderSceneObjects(encoder: MTLRenderCommandEncoder, viewMatrix: matrix_float4x4, projectionMatrix: matrix_float4x4) {
         // Render each node
         for (index, node) in scene.nodes.enumerated() {
             guard let vertexBuffer = node.vertexBuffer else {
@@ -129,12 +159,18 @@ class Renderer: NSObject, MTKViewDelegate {
             var uniforms = Uniforms(
                 modelMatrix: node.modelMatrix,
                 viewMatrix: viewMatrix,
-                projectionMatrix: projectionMatrix
+                projectionMatrix: projectionMatrix,
+                normalMatrix: simd_transpose(simd_inverse(node.modelMatrix)),
+                color: node.color,
+                lightPosition: SIMD3<Float>(5, 5, 5),
+                ambientIntensity: 0.2,
+                diffuseIntensity: 0.8
             )
             
             // Copy uniforms to buffer at offset for this node
-            let uniformsOffset = MemoryLayout<Uniforms>.stride * index
-            uniformsBuffer.contents().advanced(by: uniformsOffset).copyMemory(
+            let alignedUniformsSize = (MemoryLayout<Uniforms>.stride + 0xFF) & ~0xFF  // Align to 256 bytes
+            let uniformsOffset = alignedUniformsSize * index
+            uniformsBuffer?.contents().advanced(by: uniformsOffset).copyMemory(
                 from: &uniforms,
                 byteCount: MemoryLayout<Uniforms>.stride
             )
@@ -142,6 +178,7 @@ class Renderer: NSObject, MTKViewDelegate {
             // Set vertex buffer and uniforms
             encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
             encoder.setVertexBuffer(uniformsBuffer, offset: uniformsOffset, index: 1)
+            encoder.setFragmentBuffer(uniformsBuffer, offset: uniformsOffset, index: 1)
             
             // Draw the node
             encoder.drawPrimitives(
@@ -162,17 +199,24 @@ class Renderer: NSObject, MTKViewDelegate {
             var uniforms = Uniforms(
                 modelMatrix: branch.modelMatrix,
                 viewMatrix: viewMatrix,
-                projectionMatrix: projectionMatrix
+                projectionMatrix: projectionMatrix,
+                normalMatrix: matrix_identity_float4x4,
+                color: SIMD4<Float>(1, 1, 1, 1),  // White color for branches
+                lightPosition: SIMD3<Float>(5, 5, 5),
+                ambientIntensity: 0.2,
+                diffuseIntensity: 0.8
             )
             
-            let uniformsOffset = MemoryLayout<Uniforms>.stride * (scene.nodes.count + (scene.branches.firstIndex(of: branch) ?? 0))
-            uniformsBuffer.contents().advanced(by: uniformsOffset).copyMemory(
+            let alignedUniformsSize = (MemoryLayout<Uniforms>.stride + 0xFF) & ~0xFF  // Align to 256 bytes
+            let uniformsOffset = alignedUniformsSize * (scene.nodes.count + (scene.branches.firstIndex(of: branch) ?? 0))
+            uniformsBuffer?.contents().advanced(by: uniformsOffset).copyMemory(
                 from: &uniforms,
                 byteCount: MemoryLayout<Uniforms>.stride
             )
             
             encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
             encoder.setVertexBuffer(uniformsBuffer, offset: uniformsOffset, index: 1)
+            encoder.setFragmentBuffer(uniformsBuffer, offset: uniformsOffset, index: 1)
             
             encoder.drawPrimitives(
                 type: .line,
@@ -180,13 +224,63 @@ class Renderer: NSObject, MTKViewDelegate {
                 vertexCount: branch.vertexCount
             )
         }
-        
-        encoder.endEncoding()
-        commandBuffer.present(drawable)
-        commandBuffer.commit()
     }
     
-    // Add debug methods
+    private func renderDebugLines(encoder: MTLRenderCommandEncoder, viewMatrix: matrix_float4x4, projectionMatrix: matrix_float4x4) {
+        guard let debugLineRenderer = debugLineRenderer else { return }
+        
+        // Add any pending debug lines
+        for line in pendingDebugLines {
+            debugLineRenderer.addLine(start: line.start, end: line.end, color: line.color)
+        }
+        pendingDebugLines.removeAll()
+        
+        // Update and render debug lines
+        debugLineRenderer.updateBuffers()
+        debugLineRenderer.render(encoder: encoder, viewMatrix: viewMatrix, projectionMatrix: projectionMatrix)
+    }
+    
+    // Debug methods
+    func enableDebugVisualization(_ enabled: Bool) {
+        isDebugEnabled = enabled
+        if !enabled {
+            debugLineRenderer?.clear()
+            pendingDebugLines.removeAll()
+        }
+        print("Debug visualization \(enabled ? "enabled" : "disabled")")
+    }
+    
+    func debugDrawLine(start: SIMD3<Float>, end: SIMD3<Float>, color: SIMD4<Float>) {
+        guard isDebugEnabled else { return }
+        pendingDebugLines.append((start: start, end: end, color: color))
+    }
+    
+    func drawDebugAxes(length: Float = 1.0) {
+        guard isDebugEnabled else { return }
+        let origin = SIMD3<Float>(0, 0, 0)
+        
+        // X axis (red)
+        debugDrawLine(
+            start: origin,
+            end: SIMD3<Float>(length, 0, 0),
+            color: SIMD4<Float>(1, 0, 0, 1)
+        )
+        
+        // Y axis (green)
+        debugDrawLine(
+            start: origin,
+            end: SIMD3<Float>(0, length, 0),
+            color: SIMD4<Float>(0, 1, 0, 1)
+        )
+        
+        // Z axis (blue)
+        debugDrawLine(
+            start: origin,
+            end: SIMD3<Float>(0, 0, length),
+            color: SIMD4<Float>(0, 0, 1, 1)
+        )
+    }
+    
     func debugPrintSceneState() {
         print("🔍 Scene State:")
         print("Nodes: \(scene.nodes.count)")
@@ -202,5 +296,6 @@ class Renderer: NSObject, MTKViewDelegate {
         print("Camera:")
         print("  - Position: \(camera.position)")
         print("  - Target: \(camera.target)")
+        camera.debugPrintCameraMatrix()
     }
 } 

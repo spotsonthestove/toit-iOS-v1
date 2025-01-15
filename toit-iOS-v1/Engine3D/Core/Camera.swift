@@ -17,21 +17,23 @@ class Camera {
     }
     
     var viewMatrix: matrix_float4x4 {
+        // Calculate view vectors
         let forward = normalize(target - position)
-        let right = normalize(cross(up, forward))
-        let upNew = cross(forward, right)
+        let right = normalize(cross(SIMD3<Float>(0, 1, 0), forward))
+        let up = normalize(cross(forward, right))
         
+        // Create matrices
         let translationMatrix = matrix_float4x4(columns: (
             SIMD4<Float>(1, 0, 0, 0),
             SIMD4<Float>(0, 1, 0, 0),
             SIMD4<Float>(0, 0, 1, 0),
-            SIMD4<Float>(-position.x, -position.y, -position.z, 1)
+            SIMD4<Float>(-dot(right, position), -dot(up, position), -dot(forward, position), 1)
         ))
         
         let rotationMatrix = matrix_float4x4(columns: (
-            SIMD4<Float>(right.x, right.y, right.z, 0),
-            SIMD4<Float>(upNew.x, upNew.y, upNew.z, 0),
-            SIMD4<Float>(forward.x, forward.y, forward.z, 0),
+            SIMD4<Float>(right.x, up.x, forward.x, 0),
+            SIMD4<Float>(right.y, up.y, forward.y, 0),
+            SIMD4<Float>(right.z, up.z, forward.z, 0),
             SIMD4<Float>(0, 0, 0, 1)
         ))
         
@@ -55,5 +57,11 @@ class Camera {
     func updateProjection(aspect: Float) {
         self.aspect = aspect
         print("Camera projection updated with aspect ratio: \(aspect)")
+    }
+    
+    func debugPrintCameraMatrix() {
+        print("Camera Position:", position)
+        print("Camera Target:", target)
+        print("View Matrix:\n", viewMatrix)
     }
 } 

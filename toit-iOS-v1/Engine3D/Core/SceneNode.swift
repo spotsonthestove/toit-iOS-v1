@@ -32,12 +32,15 @@ class Engine3DSceneNode: Hashable {
     var vertexBuffer: MTLBuffer?
     var vertexCount: Int = 0
     
+    // Add color property
+    var color: SIMD4<Float>
+    
     // Add this computed property to Engine3DSceneNode
     var modelMatrix: simd_float4x4 {
         return worldMatrix  // Using worldMatrix as the model matrix
     }
     
-    init(id: UUID = UUID(), title: String = "", position: SIMD3<Float>) {
+    init(id: UUID = UUID(), title: String = "", position: SIMD3<Float>, color: SIMD4<Float> = SIMD4<Float>(0.2, 0.2, 0.2, 1.0)) {
         self.id = id
         self.title = title
         self.description = nil
@@ -48,6 +51,7 @@ class Engine3DSceneNode: Hashable {
         self.lastModified = Date()
         self.isDeleted = false
         self.needsSync = true
+        self.color = color
         
         self.localMatrix = matrix_identity_float4x4
         self.worldMatrix = matrix_identity_float4x4
@@ -113,24 +117,24 @@ class Engine3DSceneNode: Hashable {
             // Front face - triangle 1
             Vertex(position: SIMD3<Float>(-0.1, -0.1, 0.1), 
                   normal: SIMD3<Float>(0, 0, 1),   // Front-facing normal
-                  color: SIMD4<Float>(1, 0, 0, 1)),
+                  color: color),
             Vertex(position: SIMD3<Float>(0.1, -0.1, 0.1), 
                   normal: SIMD3<Float>(0, 0, 1),
-                  color: SIMD4<Float>(1, 0, 0, 1)),
+                  color: color),
             Vertex(position: SIMD3<Float>(0.1, 0.1, 0.1), 
                   normal: SIMD3<Float>(0, 0, 1),
-                  color: SIMD4<Float>(1, 0, 0, 1)),
+                  color: color),
             
             // Front face - triangle 2
             Vertex(position: SIMD3<Float>(-0.1, -0.1, 0.1), 
                   normal: SIMD3<Float>(0, 0, 1),
-                  color: SIMD4<Float>(1, 0, 0, 1)),
+                  color: color),
             Vertex(position: SIMD3<Float>(0.1, 0.1, 0.1), 
                   normal: SIMD3<Float>(0, 0, 1),
-                  color: SIMD4<Float>(1, 0, 0, 1)),
+                  color: color),
             Vertex(position: SIMD3<Float>(-0.1, 0.1, 0.1), 
                   normal: SIMD3<Float>(0, 0, 1),
-                  color: SIMD4<Float>(1, 0, 0, 1)),
+                  color: color),
         ]
         
         let bufferSize = vertices.count * MemoryLayout<Vertex>.stride

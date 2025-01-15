@@ -11,6 +11,7 @@ struct Engine3DView: View {
             MetalViewRepresentable(metalView: metalView, renderer: $renderer)
                 .onAppear {
                     setupRenderer()
+                    testCameraSetup()
                     createInitialScene()
                 }
             
@@ -42,6 +43,21 @@ struct Engine3DView: View {
         print("Renderer setup: \(renderer != nil)")
     }
     
+    private func testCameraSetup() {
+        guard let renderer = renderer else { return }
+        
+        // Enable debug visualization
+        renderer.enableDebugVisualization(true)
+        renderer.drawDebugAxes(length: 2.0)
+        
+        // Set up and test camera
+        renderer.camera.position = SIMD3<Float>(0, 0, -5)
+        renderer.camera.target = SIMD3<Float>(0, 0, 0)
+        renderer.camera.debugPrintCameraMatrix()
+        
+        print("Camera test setup complete")
+    }
+    
     private func addNode() {
         guard let renderer = renderer else {
             print("❌ Cannot add node - renderer is nil")
@@ -59,22 +75,53 @@ struct Engine3DView: View {
     }
     
     private func createInitialScene() {
-        guard let renderer = renderer else { return }
-        
-        // Create a test node at the center
-        let centerNode = Engine3DSceneNode(position: SIMD3<Float>(0, 0, 0))
-        centerNode.setupGeometry(device: renderer.device)
-        renderer.scene.addNode(centerNode)
-        
-        // Create a second node offset to the right
-        let rightNode = Engine3DSceneNode(position: SIMD3<Float>(1, 0, 0))
-        rightNode.setupGeometry(device: renderer.device)
-        renderer.scene.addNode(rightNode)
-        
-        // Create a branch between them if your Engine3DSceneNode has connect functionality
-        if let branch = centerNode.connect(to: rightNode, device: renderer.device) {
-            renderer.scene.addBranch(branch)
+        guard let renderer = renderer else {
+            print("❌ Cannot create scene - renderer is nil")
+            return
         }
+        
+        // Define node configurations with positions and colors
+        let nodeConfigs: [(position: SIMD3<Float>, color: SIMD4<Float>)] = [
+            // Center node (white)
+            (SIMD3<Float>(0, 0, 0), SIMD4<Float>(1, 1, 1, 1)),
+            
+            // Front nodes (blue)
+            (SIMD3<Float>(0, 0, 1), SIMD4<Float>(0, 0, 1, 1)),
+            (SIMD3<Float>(1, 0, 1), SIMD4<Float>(0, 0, 1, 1)),
+            
+            // Back nodes (green)
+            (SIMD3<Float>(0, 0, -1), SIMD4<Float>(0, 1, 0, 1)),
+            (SIMD3<Float>(-1, 0, -1), SIMD4<Float>(0, 1, 0, 1)),
+            
+            // Upper nodes (red)
+            (SIMD3<Float>(0, 1, 0), SIMD4<Float>(1, 0, 0, 1)),
+            (SIMD3<Float>(0, 1, 1), SIMD4<Float>(1, 0, 0, 1))
+        ]
+        
+        // Create nodes
+        var nodes: [Engine3DSceneNode] = []
+        for (position, color) in nodeConfigs {
+            let node = Engine3DSceneNode(position: position, color: color)
+            node.setupGeometry(device: renderer.device)
+            renderer.scene.addNode(node)
+            nodes.append(node)
+        }
+        
+        // Create branches between center node and adjacent nodes
+        if let centerNode = nodes.first {
+            for i in 1..<nodes.count {
+                if let branch = centerNode.connect(to: nodes[i], device: renderer.device) {
+                    renderer.scene.addBranch(branch)
+                }
+            }
+            
+            // Connect upper nodes to each other
+            if let branch = nodes[5].connect(to: nodes[6], device: renderer.device) {
+                renderer.scene.addBranch(branch)
+            }
+        }
+        
+        print("✅ Created test scene with \(nodes.count) nodes")
     }
 }
 
