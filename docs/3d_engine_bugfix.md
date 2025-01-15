@@ -345,3 +345,13 @@ After implementing these fixes:
 4. Optimize rendering performance
 
 Remember to commit changes after each successful step and maintain proper error logging throughout the implementation.
+
+## Ray Casting and Node Selection
+For detailed analysis and debugging of the ray casting and node selection system, refer to `docs/tap_issues.md`. This document contains:
+- Coordinate space transformation analysis
+- Camera matrix construction verification
+- Ray-sphere intersection testing
+- Debug visualization recommendations
+- Step-by-step solutions
+
+Follow the debugging steps in `tap_issues.md` to verify and fix ray casting issues.
