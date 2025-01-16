@@ -730,3 +730,58 @@ let discriminant = b * b - 4 * a * c
 - [Ray-Sphere Intersection](https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection.html)
 - [Picking with Ray Casting](https://antongerdelan.net/opengl/raycasting.html)
 - [Screen to World Space](https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-generating-camera-rays/generating-camera-rays.html)
+
+## 2024-03-21 (Interaction System Fix)
+
+### Ray Casting and Node Selection Improvements
+✅ Fixed coordinate space transformation issues
+✅ Improved ray construction method
+✅ Enhanced hit testing accuracy
+✅ Added comprehensive debug visualization
+
+### Key Changes Made
+1. Coordinate Space Transformation:
+   - Proper handling of drawable vs view space
+   - Correct Y-axis flip for Metal coordinate system
+   - Accurate perspective projection handling
+
+2. Ray Construction:
+   - Using near and far clip planes for ray construction
+   - Proper perspective divide handling
+   - More accurate ray origin calculation
+
+3. Hit Testing:
+   - Improved hit radius calculation
+   - Better distance-based scaling
+   - More accurate closest point calculation
+
+### Technical Details
+- Changed from camera-based to clip-space ray construction
+- Added proper coordinate space transformations:
+  ```swift
+  // Convert tap location to drawable space first
+  let drawableX = point.x * drawableSize.width / viewSize.width
+  let drawableY = point.y * drawableSize.height / viewSize.height
+  
+  // Convert to normalized device coordinates (-1 to 1)
+  let normalizedX = (2.0 * Float(drawableX) / Float(drawableSize.width)) - 1.0
+  let normalizedY = -((2.0 * Float(drawableY) / Float(drawableSize.height)) - 1.0)
+  ```
+
+### Debug Improvements
+- Added visual ray path tracking
+- Enhanced hit testing visualization
+- Improved debug logging
+- Added intersection point visualization
+
+### Next Steps
+1. Consider implementing:
+   - Hover state feedback
+   - Multi-selection support
+   - Drag and drop functionality
+   - Visual feedback for selectable nodes
+
+### Performance Considerations
+- Monitor frame rate with debug visualization
+- Consider optimizing hit testing for large node counts
+- Evaluate debug visualization impact
