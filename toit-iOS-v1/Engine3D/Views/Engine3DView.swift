@@ -68,12 +68,12 @@ struct Engine3DView: View {
         // Enable debug visualization first
         renderer.enableDebugVisualization(true)
         
-        // Set up camera
-        renderer.camera.position = SIMD3<Float>(0, 0, -5)
-        renderer.camera.target = SIMD3<Float>(0, 0, 0)
+        // Set up camera with elevated back position for better initial view
+        renderer.camera.position = SIMD3<Float>(0, 2, -5)  // Elevated back position
+        renderer.camera.target = SIMD3<Float>(0, 0, 0)     // Looking at center
         
         // Draw debug axes with a larger size for visibility
-        renderer.drawDebugAxes(length: 5.0)  // Increased from 2.0 to 5.0
+        renderer.drawDebugAxes(length: 5.0)
         
         // Print debug info
         print("📸 Camera setup complete:")
@@ -160,175 +160,169 @@ struct Engine3DView: View {
     private func selectNodeAtPoint(_ point: CGPoint) {
         guard let renderer = renderer else { return }
         
-        // Ensure debug visualization is enabled
-        if !renderer.isDebugEnabled {
-            renderer.enableDebugVisualization(true)
-            renderer.drawDebugAxes(length: 5.0)
-        }
+        // Clear previous debug visualization but keep axes
+        renderer.clearDebugLines()
+        renderer.drawDebugAxes(length: 5.0)
         
-        // Only clear previous selection visualization, not axes
-        if let selectedId = selectedNodeId,
-           let previousNode = renderer.scene.nodes.first(where: { $0.id == selectedId }) {
-            previousNode.deselect()
-            // Clear only the previous selection's debug visualization
-            renderer.clearDebugLines()
-            renderer.drawDebugAxes(length: 5.0)
-        }
-        
-        // Get view and drawable sizes
+        // Get view and drawable sizes for proper scaling
         let viewSize = metalView.bounds.size
         let drawableSize = metalView.drawableSize
-        let scale = metalView.contentScaleFactor
         
-        // Convert tap location to normalized device coordinates (-1 to 1)
-        let normalizedX = (2.0 * Float(point.x) / Float(viewSize.width)) - 1.0
-        let normalizedY = 1.0 - (2.0 * Float(point.y) / Float(viewSize.height))  // Flip Y and normalize
+        // Convert tap location to drawable space first
+        let drawableX = point.x * drawableSize.width / viewSize.width
+        let drawableY = point.y * drawableSize.height / viewSize.height
+        
+        // Convert to normalized device coordinates (-1 to 1)
+        let normalizedX = (2.0 * Float(drawableX) / Float(drawableSize.width)) - 1.0
+        let normalizedY = -((2.0 * Float(drawableY) / Float(drawableSize.height)) - 1.0)  // Flip Y and negate
         
         print("📍 Tap coordinates:")
         print("  Screen tap: \(point)")
+        print("  Drawable coords: (\(drawableX), \(drawableY))")
         print("  View size: \(viewSize)")
+        print("  Drawable size: \(drawableSize)")
         print("  Normalized: (\(normalizedX), \(normalizedY))")
         
-        // Create ray in clip space
-        let clipCoords = SIMD4<Float>(normalizedX, normalizedY, -1.0, 1.0)
+        // Create ray in clip space (use -1 for near plane, 1 for far plane)
+        let clipNear = SIMD4<Float>(normalizedX, normalizedY, -1.0, 1.0)
+        let clipFar = SIMD4<Float>(normalizedX, normalizedY, 1.0, 1.0)
         
         // Transform to view space
         let invProjection = simd_inverse(renderer.camera.projectionMatrix)
-        var viewCoords = invProjection * clipCoords
-        viewCoords = viewCoords / viewCoords.w
+        var viewNear = invProjection * clipNear
+        var viewFar = invProjection * clipFar
         
-        // Create ray direction in world space
+        // Perform perspective divide
+        viewNear = viewNear / viewNear.w
+        viewFar = viewFar / viewFar.w
+        
+        // Transform to world space
         let invView = simd_inverse(renderer.camera.viewMatrix)
-        let worldCoords = invView * SIMD4<Float>(viewCoords.x, viewCoords.y, -1.0, 0.0)
-        let rayDirection = normalize(SIMD3<Float>(worldCoords.x, worldCoords.y, worldCoords.z))
+        let worldNear = invView * viewNear
+        let worldFar = invView * viewFar
         
-        // Create ray from camera position
-        let ray = Ray(origin: renderer.camera.position, direction: rayDirection)
+        // Create ray from near to far points
+        let rayOrigin = SIMD3<Float>(worldNear.x, worldNear.y, worldNear.z)
+        let rayTarget = SIMD3<Float>(worldFar.x, worldFar.y, worldFar.z)
+        let rayDirection = normalize(rayTarget - rayOrigin)
+        
+        let ray = Ray(origin: rayOrigin, direction: rayDirection)
         
         print("🌐 Ray calculation:")
-        print("  Camera: \(renderer.camera.position)")
+        print("  Origin: \(rayOrigin)")
+        print("  Target: \(rayTarget)")
         print("  Direction: \(rayDirection)")
         
-        // Draw debug visualization
+        // Draw ray path for debugging (white)
         renderer.debugDrawLine(
             start: ray.origin,
             end: ray.origin + ray.direction * 10.0,
-            color: SIMD4<Float>(1, 1, 1, 0.9)  // White
+            color: SIMD4<Float>(1, 1, 1, 0.5)
         )
         
-        // Draw points along the ray (cyan)
-        for t in stride(from: 1.0, through: 10.0, by: 2.0) {
+        // Add debug points along ray path
+        for t in stride(from: 0.0, through: 10.0, by: 0.5) {
             let point = ray.origin + ray.direction * Float(t)
             renderer.debugDrawSphere(
                 center: point,
-                radius: 0.05,
-                color: SIMD4<Float>(0, 1, 1, 0.8)
+                radius: 0.02,
+                color: SIMD4<Float>(1, 1, 0, 0.5)
             )
         }
         
-        // Draw tap point at target plane distance (magenta)
-        let targetDistance = length(renderer.camera.target - renderer.camera.position)
-        let tapPoint = ray.origin + ray.direction * targetDistance
-        renderer.debugDrawSphere(
-            center: tapPoint,
-            radius: 0.1,
-            color: SIMD4<Float>(1, 0, 1, 1)
-        )
-        
-        // Draw a line from camera to target for reference (blue)
-        renderer.debugDrawLine(
-            start: renderer.camera.position,
-            end: renderer.camera.target,
-            color: SIMD4<Float>(0, 0, 1, 0.5)  // Blue
-        )
-        
-        print("🎯 Ray visualization points:")
-        print("  Camera position: \(ray.origin)")
-        print("  Camera target: \(renderer.camera.target)")
-        print("  Target distance: \(targetDistance)")
-        print("  Tap world position: \(tapPoint)")
-        
-        // Use smaller hit radius that matches node scale
-        let nodeScale: Float = 0.2  // Typical node size
-        let hitRadius: Float = nodeScale * 1.5  // Slightly larger than node for easier selection
+        // Calculate hit testing parameters
+        let nodeScale: Float = 0.2  // Base node size
+        let baseHitRadius: Float = nodeScale * 2.0  // Increased from 1.5 to 2.0
         
         // Initialize tracking variables for closest intersection
         var closestNode: Engine3DSceneNode?
         var minDistance = Float.infinity
+        var closestIntersectionPoint: SIMD3<Float>?
         
-        print("🔍 Testing nodes for intersection (hit radius: \(hitRadius)):")
+        print("🔍 Testing nodes for intersection (base hit radius: \(baseHitRadius)):")
         for node in renderer.scene.nodes {
+            // Calculate distance-based hit radius
+            let distanceToCamera = length(node.position - ray.origin)
+            let hitRadius = baseHitRadius * (1.0 + distanceToCamera * 0.15)  // Increased from 0.1 to 0.15
+            
             print("  Testing node at position: \(node.position)")
+            print("  Distance from camera: \(distanceToCamera)")
+            print("  Adjusted hit radius: \(hitRadius)")
             
-            // Calculate distance from camera to node
-            let cameraToNode = length(node.position - ray.origin)
-            print("  Distance from camera: \(cameraToNode)")
-            
-            if let intersection = intersectSphere(ray: ray, center: node.position, radius: hitRadius) {
-                // The intersection distance is along the ray
-                let intersectionPoint = ray.origin + ray.direction * intersection
-                let distanceToCamera = length(intersectionPoint - ray.origin)
-                
-                print("  ✅ Hit node at ray distance: \(intersection)")
-                print("  Intersection point: \(intersectionPoint)")
-                print("  Distance to camera: \(distanceToCamera)")
-                
-                // Only update if this is the closest intersection to the camera
-                if distanceToCamera < minDistance {
-                    minDistance = distanceToCamera
-                    closestNode = node
-                    print("  📍 New closest node!")
-                }
-            } else {
-                // Calculate closest point on ray for debug visualization
-                let toCenter = node.position - ray.origin
-                let rayDotCenter = dot(ray.direction, toCenter)
-                let closestPoint = ray.origin + ray.direction * rayDotCenter
-                let distanceToNode = length(closestPoint - node.position)
-                
-                print("  ❌ No intersection - closest approach: \(distanceToNode)")
-            }
-            
-            // Draw debug sphere showing hit radius (red for non-selected, green for closest)
-            let sphereColor = node === closestNode ? 
-                SIMD4<Float>(0.2, 1, 0.2, 0.5) :  // Green for closest
-                SIMD4<Float>(1, 0.2, 0.2, 0.5)    // Red for others
-            
+            // Draw hit testing sphere for debugging
             renderer.debugDrawSphere(
                 center: node.position,
                 radius: hitRadius,
-                color: sphereColor
+                color: SIMD4<Float>(1, 0, 0, 0.1)
             )
+            
+            // Calculate closest point on ray to node center
+            let toCenter = node.position - ray.origin
+            let projection = dot(toCenter, ray.direction)
+            let closestPoint = ray.origin + ray.direction * max(0, projection)
+            let distanceToRay = length(node.position - closestPoint)
+            
+            print("  Distance to ray: \(distanceToRay)")
+            
+            if distanceToRay <= hitRadius {
+                let distanceToIntersection = length(closestPoint - ray.origin)
+                
+                print("  ✅ Hit at distance: \(distanceToIntersection)")
+                
+                // Update if this is the closest valid intersection
+                if distanceToIntersection < minDistance {
+                    minDistance = distanceToIntersection
+                    closestNode = node
+                    closestIntersectionPoint = closestPoint
+                    
+                    // Draw intersection point (yellow)
+                    renderer.debugDrawSphere(
+                        center: closestPoint,
+                        radius: 0.05,
+                        color: SIMD4<Float>(1, 1, 0, 1)
+                    )
+                    
+                    // Draw line from ray to node center (cyan)
+                    renderer.debugDrawLine(
+                        start: closestPoint,
+                        end: node.position,
+                        color: SIMD4<Float>(0, 1, 1, 0.5)
+                    )
+                }
+            }
         }
         
-        // Deselect previously selected node
+        // Update selection
         if let selectedId = selectedNodeId,
            let previousNode = renderer.scene.nodes.first(where: { $0.id == selectedId }) {
             previousNode.deselect()
         }
         
-        // Select new node
-        if let node = closestNode {
+        if let node = closestNode,
+           let intersectionPoint = closestIntersectionPoint {
             selectedNodeId = node.id
             node.select()
-            print("✅ Selected node: \(node.id) at position \(node.position)")
             
-            // Draw debug sphere around selected node (bright green)
+            print("✅ Selected node: \(node.id)")
+            print("  Position: \(node.position)")
+            print("  Intersection point: \(intersectionPoint)")
+            
+            // Draw selection visualization
             renderer.debugDrawSphere(
                 center: node.position,
-                radius: hitRadius * 1.1,
-                color: SIMD4<Float>(0.2, 1, 0.2, 0.7)
+                radius: baseHitRadius * 1.2,
+                color: SIMD4<Float>(0, 1, 0, 0.5)  // Bright green
             )
             
-            // Draw line from camera to selected node (green)
+            // Draw line from camera to selected node
             renderer.debugDrawLine(
                 start: ray.origin,
-                end: node.position,
-                color: SIMD4<Float>(0.2, 1, 0.2, 0.7)
+                end: intersectionPoint,
+                color: SIMD4<Float>(0, 1, 0, 0.8)  // Bright green
             )
         } else {
             selectedNodeId = nil
-            print("❌ No node selected - no intersection found")
+            print("❌ No node selected")
         }
     }
     
@@ -474,17 +468,29 @@ struct MetalViewRepresentable: UIViewRepresentable {
             switch gesture.state {
             case .began:
                 lastPanLocation = gesture.location(in: gesture.view)
+                print("🔄 Pan began at: \(lastPanLocation!)")
             case .changed:
-                guard let lastLocation = lastPanLocation else { return }
-                let currentLocation = gesture.location(in: gesture.view)
+                guard let lastLocation = lastPanLocation,
+                      let view = gesture.view else { return }
                 
+                let currentLocation = gesture.location(in: view)
+                
+                // Calculate delta in view space coordinates
                 let deltaX = Float(currentLocation.x - lastLocation.x)
                 let deltaY = Float(currentLocation.y - lastLocation.y)
                 
-                renderer.camera.orbit(deltaX: deltaX, deltaY: deltaY)
+                // Scale deltas based on view size for consistent movement
+                let viewSize = view.bounds.size
+                let scaledDeltaX = deltaX / Float(viewSize.width) * 500  // Increased scaling
+                let scaledDeltaY = deltaY / Float(viewSize.height) * 500  // Increased scaling
+                
+                renderer.camera.orbit(deltaX: scaledDeltaX, deltaY: scaledDeltaY)
                 lastPanLocation = currentLocation
+                
+                print("🔄 Pan updated - Delta: (\(scaledDeltaX), \(scaledDeltaY))")
             case .ended, .cancelled:
                 lastPanLocation = nil
+                print("🔄 Pan ended")
             default:
                 break
             }

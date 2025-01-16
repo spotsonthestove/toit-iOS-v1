@@ -11,9 +11,19 @@ class Camera {
     private let far: Float = 100.0
     
     init(position: SIMD3<Float>, target: SIMD3<Float>) {
-        self.position = position
-        self.target = target
-        print("Camera initialized at position: \(position), looking at: \(target)")
+        // Adjust initial position to be slightly elevated and back for better view
+        self.position = SIMD3<Float>(0, 2, -5)  // Default elevated back position
+        self.target = SIMD3<Float>(0, 0, 0)     // Looking at center
+        
+        // Override with provided values if they're different from default
+        if position != SIMD3<Float>(0, 0, -5) {  // Only override if explicitly different
+            self.position = position
+        }
+        if target != SIMD3<Float>(0, 0, 0) {
+            self.target = target
+        }
+        
+        print("Camera initialized at position: \(self.position), looking at: \(self.target)")
     }
     
     var viewMatrix: matrix_float4x4 {
@@ -68,28 +78,36 @@ class Camera {
     // MARK: - Camera Controls
     
     func orbit(deltaX: Float, deltaY: Float, sensitivity: Float = 0.01) {
-        // Convert screen deltas to radians
-        let angleX = deltaX * sensitivity
-        let angleY = deltaY * sensitivity
+        // Convert screen deltas to radians with increased sensitivity
+        let angleX = deltaX * sensitivity * 2.0  // Doubled for more responsive horizontal rotation
+        let angleY = deltaY * sensitivity * 2.0  // Doubled for more responsive vertical rotation
         
         // Calculate camera vectors
         let forward = normalize(target - position)
         let right = normalize(cross(up, forward))
         
         // Create rotation matrices
-        let rotationAroundY = simd_float4x4(rotationAroundAxis: SIMD3<Float>(0, angleX, 0))
+        let rotationAroundY = simd_float4x4(rotationAroundAxis: SIMD3<Float>(0, 1, 0) * angleX)
         let rotationAroundX = simd_float4x4(rotationAroundAxis: right * angleY)
         
         // Apply rotations
         let combinedRotation = matrix_multiply(rotationAroundY, rotationAroundX)
         let relativePosition = position - target
         let rotatedPosition = combinedRotation * SIMD4<Float>(relativePosition.x, relativePosition.y, relativePosition.z, 1.0)
+        
+        // Update position
         position = target + SIMD3<Float>(rotatedPosition.x, rotatedPosition.y, rotatedPosition.z)
         
-        // Rotate the up vector as well
-        let upVector = SIMD4<Float>(up.x, up.y, up.z, 0.0)
-        let rotatedUp = combinedRotation * upVector
+        // Ensure up vector stays relatively upright but allows for some tilt
+        let newUp = SIMD4<Float>(up.x, up.y, up.z, 0.0)
+        let rotatedUp = combinedRotation * newUp
         up = normalize(SIMD3<Float>(rotatedUp.x, rotatedUp.y, rotatedUp.z))
+        
+        // Clamp vertical rotation to prevent camera flipping
+        let verticalAngle = asin(dot(normalize(target - position), SIMD3<Float>(0, 1, 0)))
+        if abs(verticalAngle) > Float.pi * 0.49 {  // Limit to slightly less than 90 degrees
+            up = SIMD3<Float>(0, 1, 0)  // Reset up vector if we're getting close to the poles
+        }
     }
     
     func zoom(factor: Float, sensitivity: Float = 2.0) {
