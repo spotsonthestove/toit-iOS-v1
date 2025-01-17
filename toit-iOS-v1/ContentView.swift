@@ -24,11 +24,15 @@ struct ContentView: View {
                 Label("Home", systemImage: "house.fill")
             }
             
-            // Engine 3D Tab
-            Engine3DView()
+
+            
+            // Add SceneKit Mind Map Tab
+            SceneKitMindMapView()
                 .tabItem {
-                    Label("3D Engine", systemImage: "cube.fill")
+                    Label("SceneKit", systemImage: "brain.head.profile")
                 }
+            
+  
             
             // Original Items List Tab
             NavigationSplitView {

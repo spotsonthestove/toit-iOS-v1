@@ -2,7 +2,7 @@ Requirements Document
 
 Purpose
 
-To develop a minimal 3D engine using Metal for rendering and interacting with a 3D mind map. The engine will handle nodes and branches, ensuring proper alignment, transformations, and interactivity. Other parts of the application will remain 2D or utilize non-3D functionality.
+To develop a minimal 3D engine using SceneKit for rendering and interacting with a 3D mind map. The engine will handle nodes and branches, ensuring proper alignment, transformations, and interactivity. Other parts of the application will remain 2D or utilize non-2D functionality.
 
 Functional Requirements
 
@@ -22,7 +22,7 @@ Functional Requirements
 	•	Add, remove, and modify nodes and branches dynamically.
 	4.	Performance:
 	•	Efficient rendering and transformation handling for up to a few thousand nodes and branches.
-	•	Use Metal’s GPU capabilities for smooth interactivity.
+	•	Use SceneKit’s GPU capabilities for smooth interactivity.
 	5.	Integration:
 	•	Modular design to integrate the 3D engine with the rest of the application.
 	•	Export/import functionality for the mind map data structure.
@@ -30,54 +30,57 @@ Functional Requirements
 Non-Functional Requirements
 
 	1.	Usability:
-	•	Intuitive camera controls and drag-and-drop interactions.
-	•	Smooth user experience on iOS devices.
+	•	Utilize SceneKit’s built-in physics for natural interaction
+	•	Leverage existing SCNView camera controls
 	2.	Portability:
-	•	Focus on iOS but design for potential extension to macOS or other platforms.
+	•	Focus on iOS with SceneKit’s cross-platform capabilities
 	3.	Maintainability:
-	•	Clear separation of concerns (e.g., rendering, data, and interactivity).
-	•	Well-documented and modular code.
+	•	Maintain SwiftUI/SceneKit separation of concerns
+	•	Follow established SceneKit patterns and best practices
 	4.	Scalability:
-	•	Capable of handling increasing complexity (e.g., larger mind maps, additional 3D features).
+	•	Utilize SceneKit’s optimizations for larger mind maps
+	•	Implement proper node/branch management systems
 
 Key Components
 
 	1.	Scene Graph:
-	•	Core data structure managing nodes, branches, and their transformations.
+	•	Utilize SceneKit’s built-in scene graph (SCNNode hierarchy) for managing nodes, branches, and their transformations.
 	2.	Renderer:
-	•	Handles rendering of nodes and branches using Metal.
-	•	Supports instancing for efficient rendering of repeated objects (e.g., nodes).
+	•	Leverage SceneKit’s rendering engine for nodes and branches.
+	•	Use SCNGeometry for efficient rendering of repeated objects (e.g., spheres for nodes).
 	3.	Input Handling:
-	•	Gesture-based interaction for touch and mouse input.
+	•	Gesture-based interaction using SwiftUI gestures integrated with SceneKit.
 	4.	Math Utilities:
-	•	Matrix and vector operations for transformations.
+	•	Use SceneKit’s built-in vector and matrix operations (SCNVector3, SCNMatrix4).
 	5.	Utility Functions:
-	•	Debugging tools (e.g., axis visualizers).
+	•	Debugging tools (e.g., axis visualizers as implemented in createAxes()).
 	•	Data import/export for mind maps.
 
 Code Development Workflow
 
-Phase 1: Setup
+Phase 1: Setup (Completed)
 
-	1.	Initialize Metal:
-	•	Set up a Metal-based project in Xcode with a MTKView for rendering.
-	•	Create a basic render pipeline with vertex and fragment shaders.
+	1.	Initialize SceneKit:
+	•	Set up a SceneKit-based project with SceneView for rendering ✓
+	•	Create basic scene setup with camera and lighting ✓
+	•	Implement debug visualization (axis system) ✓
 	2.	Build Basic Rendering:
-	•	Render static nodes (e.g., spheres) and branches (e.g., lines or cylinders).
-	•	Verify basic rendering in 3D space.
+	•	Render static nodes (spheres) ✓
+	•	Prepare for branch connections
 
 Phase 2: Core Engine Development
 
 	1.	Scene Graph Implementation:
-	•	Build a SceneNode class:
-	•	Properties: localMatrix, worldMatrix, children, parent.
-	•	Methods: updateWorldMatrix(), addChild(), removeChild().
-	•	Use this graph to manage hierarchical transformations.
+	•	Leverage SCNNode hierarchy:
+		•	Properties: position, rotation, scale
+		•	Methods: addChildNode(), removeFromParentNode()
+	•	Use existing scene graph for hierarchical transformations
 	2.	Node and Branch Rendering:
-	•	Use instancing for nodes to reduce rendering overhead.
-	•	Implement a dynamic branch generator that updates branch geometry in real time.
+	•	Implement node creation and placement ✓
+	•	Develop branch geometry system using SCNCylinder or custom geometry
 	3.	Camera Controls:
-	•	Implement basic 3D camera with orbit, zoom, and pan functionality.
+	•	Utilize SceneKit’s built-in camera controls ✓
+	•	Enhance with custom camera behaviors as needed
 
 Phase 3: Interactivity
 
@@ -91,7 +94,7 @@ Phase 3: Interactivity
 Phase 4: Optimization
 
 	1.	GPU Optimization:
-	•	Use Metal instancing for rendering nodes efficiently.
+	•	Use SceneKit’s optimizations for rendering nodes efficiently.
 	•	Optimize shaders for performance on mobile devices.
 	2.	Testing:
 	•	Test with increasing numbers of nodes and branches to identify performance bottlenecks.
@@ -148,146 +151,144 @@ Core Requirements
 
 1. Scene Graph Architecture
 
-	•	Create a Node class to represent each MindMap element.
-	•	Maintain:
-	•	Local transformation matrix (localMatrix).
-	•	World transformation matrix (worldMatrix).
-	•	List of child nodes.
+    • Utilize SCNNode for MindMap elements:
+        • Nodes are parent SCNNodes with sphere geometry
+        • Branches are child SCNNodes with cylinder geometry
+        • Leverage SCNNode's built-in transform properties:
+            • position (SCNVector3)
+            • rotation (SCNVector4)
+            • transform (SCNMatrix4)
 
-Update the world matrix like this:
-
-func updateWorldMatrix(parentMatrix: Matrix4) {
-    worldMatrix = parentMatrix * localMatrix
-    for child in children {
-        child.updateWorldMatrix(parentMatrix: worldMatrix)
-    }
-}
+    Scene graph hierarchy example:
+    ```swift
+    rootNode
+    ├── nodeA (SCNNode with sphere)
+    │   └── branchAB (SCNNode with cylinder)
+    └── nodeB (SCNNode with sphere)
+    ```
 
 2. Branch Renderer
 
-	•	Define branches as cylinders or lines dynamically stretched between node positions.
-	•	Recompute branch endpoints whenever nodes move.
+    • Create branches using SCNCylinder:
+    ```swift
+    func createBranch(from nodeA: SCNNode, to nodeB: SCNNode) -> SCNNode {
+        let distance = nodeA.position.distance(to: nodeB.position)
+        let cylinder = SCNCylinder(radius: 0.1, height: distance)
+        let branch = SCNNode(geometry: cylinder)
+        
+        // Position branch at midpoint
+        branch.position = SCNVector3.midpoint(nodeA.position, nodeB.position)
+        
+        // Calculate rotation to point from nodeA to nodeB
+        branch.eulerAngles = SCNVector3.calculateRotation(from: nodeA.position, to: nodeB.position)
+        
+        return branch
+    }
+    ```
 
+3. Node-Branch Relationships
 
-let start = nodeA.worldMatrix.position
-let end = nodeB.worldMatrix.position
-branch.updateGeometry(from: start, to: end)
+    • Maintain branch connections:
+    ```swift
+    class MindMapNode: SCNNode {
+        var connections: [Connection] = []
+        
+        struct Connection {
+            let targetNode: MindMapNode
+            let branch: SCNNode
+        }
+        
+        func connectTo(_ node: MindMapNode) {
+            let branch = createBranch(from: self, to: node)
+            self.addChildNode(branch)
+            connections.append(Connection(targetNode: node, branch: branch))
+        }
+        
+        func updateConnections() {
+            for connection in connections {
+                let branch = connection.branch
+                let target = connection.targetNode
+                
+                // Update branch position and rotation
+                branch.position = SCNVector3.midpoint(self.position, target.position)
+                branch.eulerAngles = SCNVector3.calculateRotation(from: self.position, 
+                                                                to: target.position)
+                
+                // Update branch length
+                if let cylinder = branch.geometry as? SCNCylinder {
+                    cylinder.height = self.position.distance(to: target.position)
+                }
+            }
+        }
+    }
+    ```
 
-3. Interaction Support
+4. Interaction Support
 
-	•	Add gesture recognition to select and drag nodes.
-	•	During dragging, update only the local transformation matrix of the node. Recompute the scene graph to propagate changes.
+    • Implement node dragging with hit testing:
+    ```swift
+    func handleDrag(_ gesture: DragGesture.Value) {
+        guard let hitNode = findHitNode(at: gesture.location) else { return }
+        
+        // Convert 2D screen point to 3D world position
+        let newPosition = convertScreenToWorld(gesture.location)
+        
+        // Update node position
+        hitNode.position = newPosition
+        
+        // Update all connected branches
+        if let mindMapNode = hitNode as? MindMapNode {
+            mindMapNode.updateConnections()
+        }
+    }
+    ```
 
-4. Matrix Operations
+5. Physics and Constraints
 
-Use a library like SIMD for efficient matrix math. Ensure:
-	•	Proper matrix multiplication order: worldMatrix = parentWorldMatrix * localMatrix.
-	•	Uniform scaling and correct order of rotation and translation.
+    • Add physics bodies for natural interaction:
+    ```swift
+    func setupNodePhysics(_ node: SCNNode) {
+        node.physicsBody = SCNPhysicsBody(type: .dynamic, shape: nil)
+        node.physicsBody?.isAffectedByGravity = false
+        node.physicsBody?.categoryBitMask = NodeCategory.mindNode.rawValue
+        
+        // Add constraints to limit movement if needed
+        let distanceLimit = SCNDistanceConstraint(target: rootNode)
+        distanceLimit.maximumDistance = 10
+        node.constraints = [distanceLimit]
+    }
+    ```
 
-5. Debugging
+6. Debugging Tools
 
-	•	Render debugging lines or spheres for local and world axes.
-	•	Visualize how transformations propagate through the hierarchy.
+    • Implement visual debugging helpers:
+    ```swift
+    func toggleNodeAxes(_ node: SCNNode) {
+        if node.childNodes.contains(where: { $0.name == "axes" }) {
+            node.childNode(withName: "axes", recursively: false)?.removeFromParentNode()
+        } else {
+            let axes = createAxes(length: 2)
+            axes.name = "axes"
+            node.addChildNode(axes)
+        }
+    }
+    ```
 
 Tools and Frameworks
 
-	1.	MetalKit:
-	•	Provides utility functions for rendering and matrix math.
-	2.	Swift3D:
-	•	A lightweight engine that integrates with Metal and uses a SwiftUI-like DSL.
-	3.	MetalEngine:
-	•	Offers a more robust framework for scene graph and rendering.
-	4.	Custom Libraries:
-	•	Consider building matrix operations and scene graph utilities tailored to your needs.
+    1. SceneKit:
+        • Built-in scene graph management
+        • Physics simulation
+        • Gesture handling
+        • 3D math utilities
+    2. CoreAnimation:
+        • Smooth transitions and animations
+    3. SwiftUI:
+        • UI integration via SceneView
+        • Gesture recognition
+    4. Combine:
+        • State management and updates
+        • Node synchronization
 
-Updated Requirements
-
-Branch System Requirements:
-1. Visual Representation:
-   - Cylindrical geometry for branches
-   - Configurable radius and detail level
-   - Support for different visual styles
-   - Dynamic updates with node movement
-
-2. Performance:
-   - Efficient geometry updates
-   - LOD system for distant branches
-   - Culling for off-screen elements
-   - Optimized for mobile devices
-
-3. Interaction:
-   - Visual feedback during branch creation
-   - Support for branch selection
-   - Branch style customization
-   - Branch deletion capability
-
-4. Data Management:
-   - Efficient storage of branch data
-   - Synchronization with node updates
-   - Connection persistence
-   - Branch metadata support
-
-Node Movement Requirements:
-1. Interaction:
-   - Smooth drag and drop functionality
-   - Collision detection between nodes
-   - Position constraints
-   - Movement animation
-
-2. Data Management:
-   - Efficient position updates
-   - Position persistence
-   - Synchronization system
-   - Undo/redo support
-
-Storage Requirements:
-1. Node Data:
-   - Position information
-   - Connection data
-   - Metadata storage
-   - Version control
-
-2. Performance:
-   - Efficient data structures
-   - Batch updates
-   - Background synchronization
-   - Cache management
-
-3. Sync System:
-   - Real-time updates
-   - Conflict resolution
-   - Data validation
-   - Error recovery
-
-Implementation Phases:
-
-Phase 1: Core Branch System (Current)
-- [x] Basic branch geometry
-- [x] Branch rendering pipeline
-- [x] Initial connection system
-- [ ] Basic movement support
-
-Phase 2: Enhanced Interaction
-- [ ] Improved node movement
-- [ ] Branch creation feedback
-- [ ] Selection system
-- [ ] Basic storage implementation
-
-Phase 3: Visual Enhancement
-- [ ] Branch styles
-- [ ] Movement animation
-- [ ] Visual feedback
-- [ ] LOD system
-
-Phase 4: Storage and Sync
-- [ ] Position persistence
-- [ ] Connection storage
-- [ ] Sync system
-- [ ] Cache management
-
-Phase 5: Optimization
-- [ ] Performance tuning
-- [ ] Memory management
-- [ ] Battery efficiency
-- [ ] Resource optimization
+This implementation leverages SceneKit's built-in functionality for efficient 3D rendering and physics, while maintaining a clean architecture for mind map specific features. The node-branch relationship is maintained through parent-child relationships in the scene graph, with automatic updates when nodes are moved.
 
