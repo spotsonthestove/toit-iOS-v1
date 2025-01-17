@@ -3,6 +3,66 @@ timestamp each entry as yyyy-mm-dd and a count of the number of the entry.
 
 We'll track code as it changes and the issues and solutions as they are resolved. We'll put milestones in the code as we reach them. and the next steps as we plan them.
 
+### 2024-03-19 #10: Fixed Access Control
+
+**Issue:**
+- Build error: "'sceneView' is inaccessible due to 'private' protection level"
+- Coordinator couldn't access ViewModel's sceneView property
+
+**Solution:**
+1. Changed sceneView access level from private to internal
+2. Updated gesture recognizer methods to safely access sceneView
+3. Added proper optional binding for sceneView access
+
+**Technical Notes:**
+- Internal access level allows access within the same module
+- Maintained weak reference to avoid retain cycles
+- Added safe optional binding for better safety
+
+### 2024-03-19 #9: Fixed Node Dragging Priority
+
+**Issue:**
+- Node dragging not working properly - camera orbiting instead of moving node
+- Gesture conflict resolution not properly prioritizing node interaction
+
+**Solution:**
+1. Gesture Priority:
+   - Added exclusive touch type for pan gesture
+   - Implemented proper gesture delegate methods for priority
+   - Added shouldBeRequiredToFailBy to ensure node drag takes precedence
+2. Camera Control:
+   - Temporarily disable camera control during node drag
+   - Re-enable camera control after drag ends
+3. Hit Testing:
+   - Added wouldHitNode helper to check for node hits before gesture starts
+   - Use hit testing to determine gesture priority
+
+**Technical Notes:**
+- Using UIGestureRecognizerDelegate for fine-grained gesture control
+- Proper gesture failure requirements for priority handling
+- Dynamic camera control toggling during drag operations
+
+### 2024-03-19 #8: Fixed Gesture Conflicts
+
+**Issue:**
+- Node dragging gesture preventing camera orbit/pan
+- Single-finger pan conflicting with SceneKit's camera controls
+
+**Solution:**
+1. Gesture Recognition:
+   - Implemented UIGestureRecognizerDelegate
+   - Added simultaneous gesture recognition logic
+   - Only prevent camera movement when actually dragging a node
+2. State Management:
+   - Added isDraggingNode property to track drag state
+   - Improved gesture state handling
+   - Cancel touches only when actively dragging
+
+**Technical Notes:**
+- Using gesture delegate to handle simultaneous recognition
+- Proper state tracking prevents unwanted gesture interference
+- Camera controls work normally until a node is grabbed
+
 ### 2024-03-19 #7: Fixed Node Dragging and Camera Control
 
 **Issues:**
