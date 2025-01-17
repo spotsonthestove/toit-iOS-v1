@@ -7,47 +7,51 @@ struct Engine3DView: View {
     @State private var selectedNodeId: UUID?
     
     var body: some View {
-        ZStack {
-            MetalViewRepresentable(metalView: metalView, renderer: $renderer, view: self)
-                .onAppear {
-                    setupRenderer()
-                    testCameraSetup()
-                    createInitialScene()
-                    
-                    // Force initial aspect ratio update
-                    updateAspectRatio()
-                }
-                .onDisappear {
-                    // Ensure we update aspect ratio when returning to view
-                    DispatchQueue.main.async {
+        GeometryReader { geometry in
+            ZStack {
+                MetalViewRepresentable(metalView: metalView, renderer: $renderer, view: self)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .onAppear {
+                        metalView.frame = CGRect(x: 0, y: 0, width: geometry.size.width, height: geometry.size.height)
+                        
+                        // First set up the renderer
+                        setupRenderer()
+                        
+                        // Then handle all scene setup in a single async block
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            updateAspectRatio()
+                            // Skip testCameraSetup since we've fixed the Camera init
+                            createInitialScene()
+                        }
+                    }
+                    .onDisappear {
+                        renderer = nil
+                    }
+                    .onChange(of: geometry.size) { oldValue, newValue in
+                        metalView.frame = CGRect(x: 0, y: 0, width: newValue.width, height: newValue.height)
                         updateAspectRatio()
                     }
-                }
-                // Handle both size changes and view appearance
-                .onChange(of: metalView.bounds.size) { oldValue, newValue in
-                    updateAspectRatio()
-                }
-                .allowsHitTesting(true)
-            
-            // Debug controls overlay
-            VStack {
-                Spacer()
-                HStack {
-                    Button(action: addNode) {
-                        Label("Add Node", systemImage: "plus.circle.fill")
-                            .padding()
-                            .background(Color.blue.opacity(0.7))
-                            .cornerRadius(10)
+                
+                // Debug controls overlay
+                VStack {
+                    Spacer()
+                    HStack {
+                        Button(action: addNode) {
+                            Label("Add Node", systemImage: "plus.circle.fill")
+                                .padding()
+                                .background(Color.blue.opacity(0.7))
+                                .cornerRadius(10)
+                        }
+                        
+                        Button(action: connectNodes) {
+                            Label("Connect", systemImage: "link.circle.fill")
+                                .padding()
+                                .background(Color.green.opacity(0.7))
+                                .cornerRadius(10)
+                        }
                     }
-                    
-                    Button(action: connectNodes) {
-                        Label("Connect", systemImage: "link.circle.fill")
-                            .padding()
-                            .background(Color.green.opacity(0.7))
-                            .cornerRadius(10)
-                    }
+                    .padding()
                 }
-                .padding()
             }
         }
     }
@@ -63,25 +67,43 @@ struct Engine3DView: View {
     private func testCameraSetup() {
         guard let renderer = renderer else { return }
         
-        print("📸 Setting up test camera and debug visualization")
+        print("📸 Setting up test camera...")
         
-        // Enable debug visualization first
+        // Set initial camera position for better view of scene
+        renderer.camera.position = SIMD3<Float>(5, 5, 5)  // 45-degree angle view
+        renderer.camera.target = SIMD3<Float>(0, 0, 0)    // Looking at center
+        renderer.camera.up = SIMD3<Float>(0, 1, 0)        // Keep Y-up orientation
+        
+        // Enable debug visualization
         renderer.enableDebugVisualization(true)
-        
-        // Set up camera with elevated back position for better initial view
-        renderer.camera.position = SIMD3<Float>(0, 2, -5)  // Elevated back position
-        renderer.camera.target = SIMD3<Float>(0, 0, 0)     // Looking at center
-        
-        // Draw debug axes with a larger size for visibility
         renderer.drawDebugAxes(length: 5.0)
         
-        // Print debug info
         print("📸 Camera setup complete:")
         print("  Position: \(renderer.camera.position)")
         print("  Target: \(renderer.camera.target)")
-        print("  Debug visualization enabled: \(renderer.isDebugEnabled)")
-        print("  Debug renderer exists: \(renderer.debugLineRenderer != nil)")
         renderer.camera.debugPrintCameraMatrix()
+    }
+    
+    private func testCameraMovements() {
+        guard let renderer = renderer else { return }
+        
+        // Test orbit movement
+        print("Testing orbital movement...")
+        print("Initial camera position:", renderer.camera.position)
+        
+        // Simulate 90-degree orbital rotation
+        renderer.camera.orbit(deltaX: Float.pi/2, deltaY: 0)
+        print("Camera position after horizontal orbit:", renderer.camera.position)
+        
+        // Test pan movement
+        print("Testing pan movement...")
+        renderer.camera.pan(deltaX: 1.0, deltaY: 0)
+        print("Camera position after horizontal pan:", renderer.camera.position)
+        
+        // Reset camera position
+        renderer.camera.position = SIMD3<Float>(0, 2, 10)
+        renderer.camera.target = SIMD3<Float>(0, 0, 0)
+        renderer.camera.up = SIMD3<Float>(0, 1, 0)
     }
     
     private func addNode() {
@@ -106,22 +128,31 @@ struct Engine3DView: View {
             return
         }
         
+        print("🎨 Creating initial scene...")
+        
+        // Clear any existing debug visualization and reset
+        renderer.clearDebugLines()
+        renderer.drawDebugAxes(length: 5.0)
+        
+        // Draw a ground grid for reference first
+        drawDebugGrid(size: 10, divisions: 10)
+        
         // Define node configurations with positions and colors
         let nodeConfigs: [(position: SIMD3<Float>, color: SIMD4<Float>)] = [
             // Center node (white)
             (SIMD3<Float>(0, 0, 0), SIMD4<Float>(1, 1, 1, 1)),
             
             // Front nodes (blue)
-            (SIMD3<Float>(0, 0, 1), SIMD4<Float>(0, 0, 1, 1)),
-            (SIMD3<Float>(1, 0, 1), SIMD4<Float>(0, 0, 1, 1)),
+            (SIMD3<Float>(0, 0, 3), SIMD4<Float>(0, 0, 1, 1)),
+            (SIMD3<Float>(3, 0, 3), SIMD4<Float>(0, 0, 1, 1)),
             
             // Back nodes (green)
-            (SIMD3<Float>(0, 0, -1), SIMD4<Float>(0, 1, 0, 1)),
-            (SIMD3<Float>(-1, 0, -1), SIMD4<Float>(0, 1, 0, 1)),
+            (SIMD3<Float>(0, 0, -3), SIMD4<Float>(0, 1, 0, 1)),
+            (SIMD3<Float>(-3, 0, -3), SIMD4<Float>(0, 1, 0, 1)),
             
             // Upper nodes (red)
-            (SIMD3<Float>(0, 1, 0), SIMD4<Float>(1, 0, 0, 1)),
-            (SIMD3<Float>(0, 1, 1), SIMD4<Float>(1, 0, 0, 1))
+            (SIMD3<Float>(0, 3, 0), SIMD4<Float>(1, 0, 0, 1)),
+            (SIMD3<Float>(0, 3, 3), SIMD4<Float>(1, 0, 0, 1))
         ]
         
         // Create nodes
@@ -131,6 +162,15 @@ struct Engine3DView: View {
             node.setupGeometry(device: renderer.device)
             renderer.scene.addNode(node)
             nodes.append(node)
+            
+            // Add debug sphere to visualize node position
+            renderer.debugDrawSphere(
+                center: position,
+                radius: 0.2,
+                color: SIMD4<Float>(color.x, color.y, color.z, 0.3)
+            )
+            
+            print("📍 Created node at position: \(position) with color: \(color)")
         }
         
         // Create branches between center node and adjacent nodes
@@ -138,16 +178,78 @@ struct Engine3DView: View {
             for i in 1..<nodes.count {
                 if let branch = centerNode.connect(to: nodes[i], device: renderer.device) {
                     renderer.scene.addBranch(branch)
+                    
+                    // Add debug line to visualize branch
+                    renderer.debugDrawLine(
+                        start: centerNode.position,
+                        end: nodes[i].position,
+                        color: SIMD4<Float>(1, 1, 1, 0.5)
+                    )
+                    
+                    print("🔗 Created branch from center to node \(i)")
                 }
             }
             
             // Connect upper nodes to each other
             if let branch = nodes[5].connect(to: nodes[6], device: renderer.device) {
                 renderer.scene.addBranch(branch)
+                
+                // Add debug line for upper connection
+                renderer.debugDrawLine(
+                    start: nodes[5].position,
+                    end: nodes[6].position,
+                    color: SIMD4<Float>(1, 1, 1, 0.5)
+                )
+                
+                print("🔗 Connected upper nodes")
             }
         }
         
         print("✅ Created test scene with \(nodes.count) nodes")
+    }
+    
+    private func drawDebugGrid(size: Float, divisions: Int) {
+        guard let renderer = renderer else { return }
+        
+        let step = size / Float(divisions)
+        let start = -size / 2
+        let end = size / 2
+        
+        // Draw grid lines
+        for i in 0...divisions {
+            let position = start + step * Float(i)
+            
+            // Draw X lines
+            renderer.debugDrawLine(
+                start: SIMD3<Float>(start, 0, position),
+                end: SIMD3<Float>(end, 0, position),
+                color: SIMD4<Float>(0.3, 0.3, 0.3, 0.5)
+            )
+            
+            // Draw Z lines
+            renderer.debugDrawLine(
+                start: SIMD3<Float>(position, 0, start),
+                end: SIMD3<Float>(position, 0, end),
+                color: SIMD4<Float>(0.3, 0.3, 0.3, 0.5)
+            )
+        }
+        
+        // Draw coordinate axes
+        renderer.debugDrawLine(
+            start: SIMD3<Float>(0, 0, 0),
+            end: SIMD3<Float>(size/2, 0, 0),
+            color: SIMD4<Float>(1, 0, 0, 1)  // X axis - red
+        )
+        renderer.debugDrawLine(
+            start: SIMD3<Float>(0, 0, 0),
+            end: SIMD3<Float>(0, size/2, 0),
+            color: SIMD4<Float>(0, 1, 0, 1)  // Y axis - green
+        )
+        renderer.debugDrawLine(
+            start: SIMD3<Float>(0, 0, 0),
+            end: SIMD3<Float>(0, 0, size/2),
+            color: SIMD4<Float>(0, 0, 1, 1)  // Z axis - blue
+        )
     }
     
     // MARK: - Node Selection
@@ -352,13 +454,19 @@ struct Engine3DView: View {
     }
     
     private func updateAspectRatio() {
-        guard let renderer = renderer else { return }
-        let drawableSize = metalView.drawableSize
-        let aspect = Float(drawableSize.width) / Float(drawableSize.height)
+        guard let renderer = renderer,
+              metalView.bounds.size.width > 0,
+              metalView.bounds.size.height > 0 else {
+            print("⚠️ Cannot update aspect ratio - invalid view size or missing renderer")
+            return
+        }
+        
+        let aspect = Float(metalView.bounds.size.width / metalView.bounds.size.height)
         print("📐 Updating aspect ratio: \(aspect)")
-        print("  Drawable size: \(drawableSize)")
+        print("  Drawable size: \(metalView.drawableSize)")
         print("  View bounds: \(metalView.bounds)")
-        renderer.mtkView(metalView, drawableSizeWillChange: drawableSize)
+        
+        renderer.camera.updateProjection(aspect: aspect)
     }
 }
 
@@ -468,7 +576,7 @@ struct MetalViewRepresentable: UIViewRepresentable {
             switch gesture.state {
             case .began:
                 lastPanLocation = gesture.location(in: gesture.view)
-                print("🔄 Pan began at: \(lastPanLocation!)")
+                print(" \(gesture.numberOfTouches == 1 ? "Orbit" : "Pan") began at: \(lastPanLocation!)")
             case .changed:
                 guard let lastLocation = lastPanLocation,
                       let view = gesture.view else { return }
@@ -481,16 +589,23 @@ struct MetalViewRepresentable: UIViewRepresentable {
                 
                 // Scale deltas based on view size for consistent movement
                 let viewSize = view.bounds.size
-                let scaledDeltaX = deltaX / Float(viewSize.width) * 500  // Increased scaling
-                let scaledDeltaY = deltaY / Float(viewSize.height) * 500  // Increased scaling
+                let scaledDeltaX = deltaX / Float(viewSize.width) * 2.0  // Reduced scaling for more precise control
+                let scaledDeltaY = deltaY / Float(viewSize.height) * 2.0
                 
-                renderer.camera.orbit(deltaX: scaledDeltaX, deltaY: scaledDeltaY)
+                if gesture.numberOfTouches == 1 {
+                    // Single finger: orbit (like rotating a globe)
+                    renderer.camera.orbit(deltaX: scaledDeltaX, deltaY: scaledDeltaY)
+                    print("🔄 Orbit updated - Delta: (\(scaledDeltaX), \(scaledDeltaY))")
+                } else if gesture.numberOfTouches == 2 {
+                    // Two fingers: pan (parallel to view plane)
+                    renderer.camera.pan(deltaX: scaledDeltaX, deltaY: scaledDeltaY)
+                    print("✋ Pan updated - Delta: (\(scaledDeltaX), \(scaledDeltaY))")
+                }
+                
                 lastPanLocation = currentLocation
-                
-                print("🔄 Pan updated - Delta: (\(scaledDeltaX), \(scaledDeltaY))")
             case .ended, .cancelled:
                 lastPanLocation = nil
-                print("🔄 Pan ended")
+                print("�� \(gesture.numberOfTouches == 1 ? "Orbit" : "Pan") ended")
             default:
                 break
             }

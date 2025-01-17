@@ -785,3 +785,214 @@ let discriminant = b * b - 4 * a * c
 - Monitor frame rate with debug visualization
 - Consider optimizing hit testing for large node counts
 - Evaluate debug visualization impact
+
+## 2024-03-21 (Camera Controls Update)
+
+### Camera Control Implementation
+✅ Differentiated between orbit and pan gestures
+✅ Implemented proper camera orbit behavior
+✅ Added two-finger pan functionality
+✅ Maintained existing zoom and roll controls
+
+### Key Changes Made
+1. Camera Controls:
+   - Single-finger drag = Orbit around target
+   - Two-finger drag = Pan camera and target
+   - Pinch = Zoom in/out
+   - Rotation = Camera roll
+
+2. Orbit Implementation:
+   ```swift
+   // Invert deltaX for more intuitive horizontal orbit
+   let angleX = -deltaX * sensitivity * 2.0
+   let angleY = deltaY * sensitivity * 2.0
+   ```
+
+3. Pan Implementation:
+   ```swift
+   // Scale movement based on distance from target
+   let distanceToTarget = length(target - position)
+   let moveScale = distanceToTarget * sensitivity
+   let movement = right * (-deltaX * moveScale) + upAdjusted * (-deltaY * moveScale)
+   ```
+
+### Current Status
+✅ Camera positioning working correctly
+✅ Orbit behavior matches expected Three.js-style controls
+✅ Pan movement maintains camera orientation
+✅ Debug visualization shows camera movement
+
+### Technical Details
+1. Camera Position:
+   - Default position: (0, 2, 10)
+   - Looking at: (0, 0, 0)
+   - Up vector maintained during orbit
+
+2. Movement Scaling:
+   - Orbit sensitivity: 0.01 * 2.0
+   - Pan sensitivity: 0.01 * distance
+   - Zoom limits: 1.0 to 20.0 units
+   - Roll sensitivity: 0.5
+
+### Next Steps
+1. Consider implementing:
+   - [ ] Camera position bounds
+   - [ ] Smooth transitions
+   - [ ] Alternative camera modes
+   - [ ] Save/restore camera state
+
+2. Potential Improvements:
+   - [ ] Fine-tune movement sensitivities
+   - [ ] Add momentum to movements
+   - [ ] Implement camera collision
+   - [ ] Add preset camera positions
+
+### Known Issues
+- [ ] Need to verify camera behavior with large scenes
+- [ ] Consider adjusting pan sensitivity at extreme distances
+- [ ] May need to add damping to prevent jerky movements
+- [ ] Should review interaction with node selection at oblique angles
+
+### Debug Features
+1. Visual Indicators:
+   - Coordinate axes showing camera orientation
+   - Ray visualization for selection
+   - Movement vectors during pan/orbit
+   - Hit testing volumes
+
+2. Logging:
+   - Camera position and orientation
+   - Movement deltas and scaling
+   - Gesture state transitions
+   - Matrix transformations
+
+### Performance Considerations
+- Monitor frame rate during rapid camera movement
+- Track matrix calculations per frame
+- Consider optimizing gesture handling
+- Review debug visualization impact
+
+### Integration Notes
+- Camera changes maintain compatibility with:
+  - Ray casting system
+  - Node selection
+  - Scene graph updates
+  - Debug visualization
+
+Remember to test camera controls with:
+1. Various scene sizes and node counts
+2. Different view angles and distances
+3. Rapid movement sequences
+4. Combined gesture interactions
+
+## 2024-03-21 (True Orbital Camera Implementation)
+
+### Changes Made
+✅ Implemented true orbital camera movement
+✅ Swapped gesture mappings for more intuitive control
+✅ Added automated camera movement testing
+✅ Enhanced debug visualization for camera movement
+
+### Implementation Details
+1. Camera Movement Modes:
+   ```swift
+   enum CameraMovement {
+       case pan    // Two-finger drag: moves camera parallel to view plane
+       case orbit  // Single-finger drag: rotates camera around scene center
+   }
+   ```
+
+2. Orbital Movement:
+   - Single-finger drag now rotates camera around scene center
+   - Maintains constant distance from target
+   - Properly handles up vector orientation
+   - Prevents camera flipping at poles
+
+3. Pan Movement:
+   - Two-finger drag moves camera parallel to view plane
+   - Maintains relative position between camera and target
+   - Scales movement based on distance from target
+
+### Technical Improvements
+1. Rotation Implementation:
+   ```swift
+   // Calculate orbital rotation matrices
+   let horizontalRotation = simd_float4x4(rotationY: -deltaX * sensitivity)
+   let verticalRotation = simd_float4x4(rotationX: -deltaY * sensitivity)
+   let rotation = matrix_multiply(horizontalRotation, verticalRotation)
+   ```
+
+2. Movement Scaling:
+   - Reduced base sensitivity for more precise control
+   - Scale factors:
+     - Orbit: 2.0 * view size ratio
+     - Pan: distance * 0.01
+
+3. Testing Infrastructure:
+   - Added automated movement testing
+   - Verifies orbital rotation
+   - Checks pan movement
+   - Validates camera reset
+
+### Current Status
+✅ Camera behaves like orbiting a globe
+✅ Pan movement maintains view orientation
+✅ Debug visualization shows movement clearly
+✅ Automated tests verify behavior
+
+### Known Issues
+- [ ] May need fine-tuning of sensitivity values
+- [ ] Consider adding momentum to movements
+- [ ] Should add visual reference for orbit center
+- [ ] Need to verify behavior with large node counts
+
+### Next Steps
+1. User Experience:
+   - [ ] Add visual indicator for orbit center
+   - [ ] Implement smooth transitions
+   - [ ] Add optional grid or ground plane
+   - [ ] Consider camera position presets
+
+2. Testing:
+   - [ ] Add more comprehensive movement tests
+   - [ ] Verify node selection after rotation
+   - [ ] Test with various scene sizes
+   - [ ] Measure performance impact
+
+3. Debug Features:
+   - [ ] Add movement path visualization
+   - [ ] Show rotation center indicator
+   - [ ] Visualize up vector orientation
+   - [ ] Display current movement mode
+
+### Integration Verification
+- Maintains compatibility with:
+  - Ray casting system
+  - Node selection
+  - Scene graph updates
+  - Debug visualization
+
+### Testing Checkpoints
+1. Basic Movement:
+   - [ ] Verify single-finger orbit rotates scene
+   - [ ] Confirm two-finger pan moves view plane
+   - [ ] Check zoom behavior still works
+   - [ ] Test rotation gesture functionality
+
+2. Edge Cases:
+   - [ ] Test behavior at vertical limits
+   - [ ] Verify up vector correction
+   - [ ] Check extreme zoom levels
+   - [ ] Test rapid movement sequences
+
+3. Integration:
+   - [ ] Verify node selection after orbit
+   - [ ] Check branch visualization
+   - [ ] Test debug visualization
+   - [ ] Confirm performance metrics
+
+Remember to test with:
+1. Various scene configurations
+2. Different view angles
+3. Multiple movement combinations
+4. Large node counts

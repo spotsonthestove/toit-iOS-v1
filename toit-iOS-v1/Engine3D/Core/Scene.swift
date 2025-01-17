@@ -8,9 +8,9 @@ class Engine3DScene {
     private(set) var nodes: Set<Engine3DSceneNode> = []
     private(set) var branches: [Engine3DBranch] = []
     
-    // Scene configuration
-    private let nodeSpacing: Float = 0.5
-    private let distributionRadius: Float = 0.8
+    // Scene configuration - increase distribution radius for better visibility
+    private let nodeSpacing: Float = 1.0      // Increased from 0.5
+    private let distributionRadius: Float = 3.0  // Increased from 0.8
     private let zRange: Float = 0.0
     
     func addNode(_ node: Engine3DSceneNode) {
@@ -28,19 +28,19 @@ class Engine3DScene {
     }
     
     func calculateNewNodePosition() -> SIMD3<Float> {
-        let nodeCount = Float(nodes.count)
-        
-        // First node at center
         if nodes.isEmpty {
             return SIMD3<Float>(0, 0, 0)
         }
         
-        // Distribute subsequent nodes in circle
+        let nodeCount = Float(nodes.count)
         let angle = (nodeCount - 1) * (2.0 * .pi / 6.0)
-        let x = cos(angle) * distributionRadius
-        let y = sin(angle) * distributionRadius
+        let radius = distributionRadius
         
-        let position = SIMD3<Float>(x, y, 0)
+        // Position in XZ plane for better visibility with updated camera
+        let x = cos(angle) * radius
+        let z = sin(angle) * radius
+        
+        let position = SIMD3<Float>(x, 0, z)
         print("Calculated new node position: \(position)")
         return position
     }

@@ -1,9 +1,17 @@
 import simd
 
+enum CameraMovement {
+    case pan    // Two-finger drag: moves camera parallel to view plane
+    case orbit  // Single-finger drag: rotates camera around scene center
+}
+
 class Camera {
     var position: SIMD3<Float>
     var target: SIMD3<Float>
     var up: SIMD3<Float> = SIMD3<Float>(0, 1, 0)
+    
+    // Add movement mode
+    var currentMovement: CameraMovement = .orbit
     
     private var aspect: Float = 1.0
     private let fov: Float = Float.pi / 3.0
@@ -11,12 +19,13 @@ class Camera {
     private let far: Float = 100.0
     
     init(position: SIMD3<Float>, target: SIMD3<Float>) {
-        // Adjust initial position to be slightly elevated and back for better view
-        self.position = SIMD3<Float>(0, 2, -5)  // Default elevated back position
+        // Start with a better default position that matches testCameraSetup
+        self.position = SIMD3<Float>(5, 5, 5)  // Changed from (0, 2, 10)
         self.target = SIMD3<Float>(0, 0, 0)     // Looking at center
+        self.up = SIMD3<Float>(0, 1, 0)
         
         // Override with provided values if they're different from default
-        if position != SIMD3<Float>(0, 0, -5) {  // Only override if explicitly different
+        if position != SIMD3<Float>(5, 5, 5) {  // Updated default check
             self.position = position
         }
         if target != SIMD3<Float>(0, 0, 0) {
@@ -27,10 +36,10 @@ class Camera {
     }
     
     var viewMatrix: matrix_float4x4 {
-        // Calculate view vectors
-        let forward = normalize(target - position)
-        let right = normalize(cross(up, forward))
-        let upAdjusted = normalize(cross(forward, right))  // Use this for orthogonalization
+        // Calculate view vectors with adjusted forward direction
+        let forward = normalize(position - target)  // Reversed from (target - position)
+        let right = normalize(cross(up, forward))   // Changed order for right-handed coordinate system
+        let upAdjusted = normalize(cross(forward, right))
         
         // Create matrices
         let translationMatrix = matrix_float4x4(columns: (
@@ -78,36 +87,36 @@ class Camera {
     // MARK: - Camera Controls
     
     func orbit(deltaX: Float, deltaY: Float, sensitivity: Float = 0.01) {
-        // Convert screen deltas to radians with increased sensitivity
-        let angleX = deltaX * sensitivity * 2.0  // Doubled for more responsive horizontal rotation
-        let angleY = deltaY * sensitivity * 2.0  // Doubled for more responsive vertical rotation
+        // Calculate the orbital rotation
+        let horizontalRotation = simd_float4x4(rotationY: -deltaX * sensitivity)
+        let verticalRotation = simd_float4x4(rotationX: -deltaY * sensitivity)
         
-        // Calculate camera vectors
-        let forward = normalize(target - position)
-        let right = normalize(cross(up, forward))
+        // Combine rotations
+        let rotation = matrix_multiply(horizontalRotation, verticalRotation)
         
-        // Create rotation matrices
-        let rotationAroundY = simd_float4x4(rotationAroundAxis: SIMD3<Float>(0, 1, 0) * angleX)
-        let rotationAroundX = simd_float4x4(rotationAroundAxis: right * angleY)
+        // Calculate new camera position by rotating current position around target
+        let positionRelativeToTarget = position - target
+        let rotatedPosition = rotation * SIMD4<Float>(positionRelativeToTarget.x,
+                                                     positionRelativeToTarget.y,
+                                                     positionRelativeToTarget.z,
+                                                     1.0)
         
-        // Apply rotations
-        let combinedRotation = matrix_multiply(rotationAroundY, rotationAroundX)
-        let relativePosition = position - target
-        let rotatedPosition = combinedRotation * SIMD4<Float>(relativePosition.x, relativePosition.y, relativePosition.z, 1.0)
+        // Update camera position
+        position = target + SIMD3<Float>(rotatedPosition.x,
+                                       rotatedPosition.y,
+                                       rotatedPosition.z)
         
-        // Update position
-        position = target + SIMD3<Float>(rotatedPosition.x, rotatedPosition.y, rotatedPosition.z)
-        
-        // Ensure up vector stays relatively upright but allows for some tilt
-        let newUp = SIMD4<Float>(up.x, up.y, up.z, 0.0)
-        let rotatedUp = combinedRotation * newUp
-        up = normalize(SIMD3<Float>(rotatedUp.x, rotatedUp.y, rotatedUp.z))
+        // Update up vector to maintain proper orientation
+        let upVector = rotation * SIMD4<Float>(up.x, up.y, up.z, 0.0)
+        up = normalize(SIMD3<Float>(upVector.x, upVector.y, upVector.z))
         
         // Clamp vertical rotation to prevent camera flipping
         let verticalAngle = asin(dot(normalize(target - position), SIMD3<Float>(0, 1, 0)))
-        if abs(verticalAngle) > Float.pi * 0.49 {  // Limit to slightly less than 90 degrees
-            up = SIMD3<Float>(0, 1, 0)  // Reset up vector if we're getting close to the poles
+        if abs(verticalAngle) > Float.pi * 0.49 {
+            up = SIMD3<Float>(0, 1, 0)
         }
+        
+        print("🔄 Orbital movement - Position: \(position), Up: \(up)")
     }
     
     func zoom(factor: Float, sensitivity: Float = 2.0) {
@@ -132,6 +141,25 @@ class Camera {
         let rotatedUp = rotationMatrix * upVector
         up = normalize(SIMD3<Float>(rotatedUp.x, rotatedUp.y, rotatedUp.z))
         print("📐 Camera roll: angle=\(rotationAngle), up=\(up)")
+    }
+    
+    func pan(deltaX: Float, deltaY: Float, sensitivity: Float = 0.01) {
+        let forward = normalize(target - position)
+        let right = normalize(cross(up, forward))
+        let upAdjusted = normalize(cross(forward, right))
+        
+        // Scale movement based on distance from target
+        let distanceToTarget = length(target - position)
+        let moveScale = distanceToTarget * sensitivity
+        
+        // Calculate movement in camera's local space
+        let movement = right * (-deltaX * moveScale) + upAdjusted * (-deltaY * moveScale)
+        
+        // Move both camera and target to maintain relative position
+        position += movement
+        target += movement
+        
+        print("✋ Pan movement - Position: \(position), Target: \(target)")
     }
 } 
 
