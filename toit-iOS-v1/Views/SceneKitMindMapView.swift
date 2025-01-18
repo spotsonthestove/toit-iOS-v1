@@ -127,8 +127,15 @@ class SceneKitMindMapViewModel: ObservableObject {
     private var selectedNode: SCNNode?
     private var draggedNode: SCNNode?
     private var lastDragLocation: CGPoint?
-    private var nodes: [SCNNode] = []
+    @Published private var nodePositions: [UUID: SCNVector3] = [:]
+    @Published private var connections: [UUID: Set<UUID>] = [:]
+    private var nodes: [UUID: SCNNode] = [:]
+    private var branches: [String: SCNNode] = [:]
     weak var sceneView: SCNView?
+    
+    // Track parent and child selection for connections
+    private var parentNode: SCNNode?
+    private var childNode: SCNNode?
     
     init() {
         scene = SCNScene()
@@ -191,88 +198,196 @@ class SceneKitMindMapViewModel: ObservableObject {
     func addNode() {
         let sphere = SCNSphere(radius: 0.5)
         sphere.firstMaterial?.diffuse.contents = UIColor.systemBlue
-        sphere.firstMaterial?.specular.contents = UIColor.white // Add shininess
+        sphere.firstMaterial?.specular.contents = UIColor.white
         
         let node = SCNNode(geometry: sphere)
-        node.position = SCNVector3(x: Float.random(in: -5...5),
-                                 y: Float.random(in: -5...5),
-                                 z: Float.random(in: -5...5))
+        let position = SCNVector3(x: Float.random(in: -5...5),
+                                y: Float.random(in: -5...5),
+                                z: Float.random(in: -5...5))
+        node.position = position
         
-        // Add physics body for interaction
+        // Store node with unique identifier
+        let nodeId = UUID()
+        nodes[nodeId] = node
+        nodePositions[nodeId] = position
+        
+        // Add physics body and other properties as before
         node.physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: sphere, options: nil))
         node.physicsBody?.isAffectedByGravity = false
         node.physicsBody?.mass = 0.1
-        node.physicsBody?.categoryBitMask = 1
-        node.physicsBody?.collisionBitMask = 1
+        
+        // Store node ID as user data
+        node.setValue(nodeId, forKey: "nodeId")
         
         scene.rootNode.addChildNode(node)
-        nodes.append(node)
     }
     
     func connectSelectedNodes() {
-        // TODO: Implement node connection logic
+        guard let parent = parentNode, let child = childNode,
+              let parentId = parent.value(forKey: "nodeId") as? UUID,
+              let childId = child.value(forKey: "nodeId") as? UUID else { return }
+        
+        // Store connection in our data structure
+        connections[parentId, default: []].insert(childId)
+        
+        createBranch(from: parent, to: child)
+        
+        // Reset selections after connecting
+        resetNodeSelections()
     }
     
-    func setSceneView(_ view: SCNView) {
-        self.sceneView = view
+    private func createBranch(from parent: SCNNode, to child: SCNNode) {
+        guard let parentId = parent.value(forKey: "nodeId") as? UUID,
+              let childId = child.value(forKey: "nodeId") as? UUID else { return }
+        
+        let branchId = "\(parentId.uuidString)-\(childId.uuidString)"
+        
+        // Remove existing branch if any
+        branches[branchId]?.removeFromParentNode()
+        
+        // Get node radius (assuming both nodes are spheres with same radius)
+        let nodeRadius: Float = 0.5 // This should match the sphere radius we set in addNode()
+        
+        // Calculate direction vector from parent to child
+        let direction = child.position - parent.position
+        let distance = direction.length()
+        
+        // Calculate normalized direction for precise surface points
+        let normalizedDirection = direction.normalized()
+        
+        // Calculate exact connection points on sphere surfaces
+        let startPoint = parent.position + (normalizedDirection * nodeRadius)
+        let endPoint = child.position - (normalizedDirection * nodeRadius)
+        
+        // Calculate actual branch length (between surface points)
+        let branchLength = (endPoint - startPoint).length()
+        
+        // Create branch geometry
+        let branchGeometry = SCNCylinder(radius: 0.1, height: CGFloat(branchLength))
+        branchGeometry.firstMaterial?.diffuse.contents = UIColor.gray
+        
+        let branchNode = SCNNode(geometry: branchGeometry)
+        
+        // Position branch at midpoint between surface points
+        let midPoint = (startPoint + endPoint) * 0.5
+        branchNode.position = midPoint
+        
+        // Calculate rotation to align branch with direction
+        // By default, SCNCylinder is oriented along the y-axis
+        // We need to rotate it to align with our direction vector
+        let up = SCNVector3(0, 1, 0) // Default cylinder orientation
+        let rotationAxis = up.cross(normalizedDirection)
+        let rotationAngle = acos(up.dot(normalizedDirection))
+        
+        if rotationAxis.length() > 0.0001 { // Avoid rotation if vectors are parallel
+            branchNode.rotation = SCNVector4(
+                rotationAxis.x,
+                rotationAxis.y,
+                rotationAxis.z,
+                rotationAngle
+            )
+        }
+        
+        // Store branch for future updates
+        branches[branchId] = branchNode
+        scene.rootNode.addChildNode(branchNode)
     }
     
-    func startDrag(_ gesture: UIPanGestureRecognizer) {
-        guard let sceneView = self.sceneView else { return }
-        let location = gesture.location(in: sceneView)
+    private func updateBranchImmediate(parent: SCNNode, child: SCNNode) {
+        guard let parentId = parent.value(forKey: "nodeId") as? UUID,
+              let childId = child.value(forKey: "nodeId") as? UUID else { return }
         
-        // Only perform hit test if we're not already dragging
-        guard draggedNode == nil else { return }
+        let branchId = "\(parentId.uuidString)-\(childId.uuidString)"
+        guard let branchNode = branches[branchId] else { return }
         
-        let hitResults = sceneView.hitTest(location, options: [
-            .searchMode: SCNHitTestSearchMode.closest.rawValue,
-            .boundingBoxOnly: true
-        ])
+        let nodeRadius: Float = 0.5
         
-        if let hitNode = hitResults.first?.node {
-            // Skip if we hit an axis or non-draggable node
-            guard nodes.contains(hitNode) else { return }
-            draggedNode = hitNode
-            lastDragLocation = location
-            
-            // Highlight dragged node
-            hitNode.geometry?.firstMaterial?.diffuse.contents = UIColor.systemOrange
-            
-            // Disable camera control while dragging
-            sceneView.allowsCameraControl = false
+        // Calculate new positions and orientation
+        let direction = child.position - parent.position
+        let distance = direction.length()
+        let normalizedDirection = direction.normalized()
+        
+        let startPoint = parent.position + (normalizedDirection * nodeRadius)
+        let endPoint = child.position - (normalizedDirection * nodeRadius)
+        
+        // Update branch length
+        let branchLength = (endPoint - startPoint).length()
+        if let cylinder = branchNode.geometry as? SCNCylinder {
+            cylinder.height = CGFloat(branchLength)
+        }
+        
+        // Update position and orientation
+        let midPoint = (startPoint + endPoint) * 0.5
+        branchNode.position = midPoint
+        
+        // Calculate rotation to align branch with direction
+        let up = SCNVector3(0, 1, 0) // Default cylinder orientation
+        let rotationAxis = up.cross(normalizedDirection)
+        let rotationAngle = acos(up.dot(normalizedDirection))
+        
+        if rotationAxis.length() > 0.0001 { // Avoid rotation if vectors are parallel
+            branchNode.rotation = SCNVector4(
+                rotationAxis.x,
+                rotationAxis.y,
+                rotationAxis.z,
+                rotationAngle
+            )
+        }
+    }
+    
+    private func updateConnectedBranches(for node: SCNNode) {
+        guard let nodeId = node.value(forKey: "nodeId") as? UUID else { return }
+        
+        // Update branches where this node is the parent
+        if let childIds = connections[nodeId] {
+            for childId in childIds {
+                if let childNode = nodes[childId] {
+                    updateBranchImmediate(parent: node, child: childNode)
+                }
+            }
+        }
+        
+        // Update branches where this node is the child
+        for (parentId, children) in connections {
+            if children.contains(nodeId), let parentNode = nodes[parentId] {
+                updateBranchImmediate(parent: parentNode, child: node)
+            }
         }
     }
     
     func continueDrag(_ gesture: UIPanGestureRecognizer) {
-        guard let sceneView = self.sceneView,
-              let node = draggedNode,
+        guard let sceneView = sceneView,
+              let draggedNode = draggedNode,
               let lastLocation = lastDragLocation else { return }
         
         let location = gesture.location(in: sceneView)
-        
-        // Calculate drag delta in screen coordinates
         let deltaX = Float(location.x - lastLocation.x)
         let deltaY = Float(location.y - lastLocation.y)
         
-        // Get camera orientation vectors
-        let cameraPOV = sceneView.pointOfView
-        let cameraRight = cameraPOV?.rightVector ?? SCNVector3(1, 0, 0)
-        let cameraUp = cameraPOV?.upVector ?? SCNVector3(0, 1, 0)
+        // Get the current camera orientation
+        let cameraOrientation = sceneView.pointOfView?.orientation ?? SCNQuaternion()
         
-        // Scale the movement
+        // Calculate movement in camera's coordinate system
         let dragSpeed: Float = 0.01
+        let deltaPosition = SCNVector3(
+            x: deltaX * dragSpeed,
+            y: -deltaY * dragSpeed,
+            z: 0
+        )
         
-        // Update node position
-        var newPosition = node.position
-        newPosition.add(cameraRight * deltaX * dragSpeed)
-        newPosition.add(cameraUp * -deltaY * dragSpeed)
-        node.position = newPosition
+        // Apply camera orientation to movement
+        let rotatedDelta = deltaPosition.rotated(by: cameraOrientation)
+        draggedNode.position += rotatedDelta
         
-        // Store current location for next frame
+        // Update connected branches immediately
+        updateConnectedBranches(for: draggedNode)
+        
+        // Update stored position
+        if let nodeId = draggedNode.value(forKey: "nodeId") as? UUID {
+            nodePositions[nodeId] = draggedNode.position
+        }
+        
         lastDragLocation = location
-        
-        // Update any connected branches
-        updateConnections(for: node)
     }
     
     func endDrag() {
@@ -290,29 +405,39 @@ class SceneKitMindMapViewModel: ObservableObject {
         lastDragLocation = nil
     }
     
-    private func updateConnections(for node: SCNNode) {
-        // TODO: Will implement this when we add branch connections
-    }
-    
-    func handleTap(_ gestureRecognize: UIGestureRecognizer) {
+    func handleTap(_ gestureRecognize: UITapGestureRecognizer) {
         guard let sceneView = self.sceneView else { return }
         
-        // Get tap location
         let location = gestureRecognize.location(in: sceneView)
         let hitResults = sceneView.hitTest(location, options: [
             .searchMode: SCNHitTestSearchMode.closest.rawValue,
             .boundingBoxOnly: true
         ])
         
-        // Reset previous selection
-        selectedNode?.geometry?.firstMaterial?.diffuse.contents = UIColor.systemBlue
-        
         if let hitNode = hitResults.first?.node, nodes.contains(hitNode) {
-            selectedNode = hitNode
-            // Highlight selected node
-            hitNode.geometry?.firstMaterial?.diffuse.contents = UIColor.systemGreen
+            // If no parent selected, set as parent
+            if parentNode == nil {
+                // Reset previous selections
+                selectedNode?.geometry?.firstMaterial?.diffuse.contents = UIColor.systemBlue
+                childNode?.geometry?.firstMaterial?.diffuse.contents = UIColor.systemBlue
+                
+                parentNode = hitNode
+                selectedNode = hitNode
+                hitNode.geometry?.firstMaterial?.diffuse.contents = UIColor.systemGreen
+                childNode = nil
+            } else if hitNode != parentNode {
+                // If parent exists and different node hit, set as child
+                childNode = hitNode
+                hitNode.geometry?.firstMaterial?.diffuse.contents = UIColor.systemYellow
+            }
         } else {
+            // Reset all if clicking empty space
+            selectedNode?.geometry?.firstMaterial?.diffuse.contents = UIColor.systemBlue
+            parentNode?.geometry?.firstMaterial?.diffuse.contents = UIColor.systemBlue
+            childNode?.geometry?.firstMaterial?.diffuse.contents = UIColor.systemBlue
             selectedNode = nil
+            parentNode = nil
+            childNode = nil
         }
     }
     
@@ -335,22 +460,218 @@ class SceneKitMindMapViewModel: ObservableObject {
         }
         return false
     }
+    
+    private func updateNodePosition(_ node: SCNNode, to position: SCNVector3) {
+        guard let nodeId = node.value(forKey: "nodeId") as? UUID else { return }
+        
+        // Update stored position
+        nodePositions[nodeId] = position
+        node.position = position
+        
+        // Update connected branches
+        updateConnectedBranches(for: node)
+    }
+    
+    // Helper method to generate consistent branch IDs
+    private func getBranchId(from parentId: UUID, to childId: UUID) -> String {
+        return "\(min(parentId.uuidString, childId.uuidString))-\(max(parentId.uuidString, childId.uuidString))"
+    }
+    
+    // Add method to export node positions and connections
+    func exportMindMapData() -> MindMapData {
+        return MindMapData(
+            nodePositions: nodePositions,
+            connections: connections
+        )
+    }
+    
+    // Add method to import node positions and connections
+    func importMindMapData(_ data: MindMapData) {
+        clearScene()
+        
+        // Recreate nodes with explicit conversion
+        for (nodeId, position) in data.nodePositions {
+            createNode(id: nodeId, at: position.toSCNVector3())
+        }
+        
+        // Recreate connections
+        for (parentId, childIds) in data.connections {
+            for childId in childIds {
+                if let parentNode = nodes[parentId],
+                   let childNode = nodes[childId] {
+                    createBranch(from: parentNode, to: childNode)
+                }
+            }
+        }
+    }
+    
+    // Add helper method to reset selections
+    private func resetNodeSelections() {
+        selectedNode?.geometry?.firstMaterial?.diffuse.contents = UIColor.systemBlue
+        parentNode?.geometry?.firstMaterial?.diffuse.contents = UIColor.systemBlue
+        childNode?.geometry?.firstMaterial?.diffuse.contents = UIColor.systemBlue
+        selectedNode = nil
+        parentNode = nil
+        childNode = nil
+    }
+    
+    // Add clearScene method
+    private func clearScene() {
+        // Remove all nodes except camera and lights
+        for node in scene.rootNode.childNodes {
+            if node != cameraNode && node.light == nil {
+                node.removeFromParentNode()
+            }
+        }
+        // Clear our data structures
+        nodes.removeAll()
+        branches.removeAll()
+        nodePositions.removeAll()
+        connections.removeAll()
+    }
+    
+    // Add createNode method
+    private func createNode(id: UUID, at position: SCNVector3) {
+        let sphere = SCNSphere(radius: 0.5)
+        sphere.firstMaterial?.diffuse.contents = UIColor.systemBlue
+        sphere.firstMaterial?.specular.contents = UIColor.white
+        
+        let node = SCNNode(geometry: sphere)
+        node.position = position
+        
+        // Store node with provided identifier
+        nodes[id] = node
+        nodePositions[id] = position
+        
+        // Add physics body
+        node.physicsBody = SCNPhysicsBody(type: .dynamic, shape: SCNPhysicsShape(geometry: sphere, options: nil))
+        node.physicsBody?.isAffectedByGravity = false
+        node.physicsBody?.mass = 0.1
+        
+        // Store node ID as user data
+        node.setValue(id, forKey: "nodeId")
+        
+        scene.rootNode.addChildNode(node)
+    }
+    
+    // Add setSceneView method
+    func setSceneView(_ view: SCNView) {
+        self.sceneView = view
+    }
+    
+    // Add startDrag method
+    func startDrag(_ gesture: UIPanGestureRecognizer) {
+        guard let sceneView = self.sceneView else { return }
+        let location = gesture.location(in: sceneView)
+        
+        // Only perform hit test if we're not already dragging
+        guard draggedNode == nil else { return }
+        
+        let hitResults = sceneView.hitTest(location, options: [
+            .searchMode: SCNHitTestSearchMode.closest.rawValue,
+            .boundingBoxOnly: true
+        ])
+        
+        if let hitNode = hitResults.first?.node, nodes.contains(hitNode) {
+            draggedNode = hitNode
+            lastDragLocation = location
+            
+            // Highlight dragged node
+            hitNode.geometry?.firstMaterial?.diffuse.contents = UIColor.systemOrange
+            
+            // Disable camera control while dragging
+            sceneView.allowsCameraControl = false
+        }
+    }
+}
+
+// Update Dictionary extension to work with UUID keys
+extension Dictionary where Key == UUID, Value == SCNNode {
+    func findNode(withHash hash: Int) -> SCNNode? {
+        return self.values.first { $0.hash == hash }
+    }
+}
+
+// Update Vector3 struct and conversion methods
+struct MindMapData: Codable {
+    struct Vector3: Codable {
+        let x, y, z: Float
+        
+        init(from vector: SCNVector3) {
+            self.x = vector.x
+            self.y = vector.y
+            self.z = vector.z
+        }
+        
+        // Add explicit conversion method
+        func toSCNVector3() -> SCNVector3 {
+            return SCNVector3(x: x, y: y, z: z)
+        }
+    }
+    
+    let nodePositions: [UUID: Vector3]
+    let connections: [UUID: Set<UUID>]
+    
+    init(nodePositions: [UUID: SCNVector3], connections: [UUID: Set<UUID>]) {
+        self.nodePositions = nodePositions.mapValues { Vector3(from: $0) }
+        self.connections = connections
+    }
+}
+
+// Add Dictionary extension for contains check
+extension Dictionary where Value: AnyObject {
+    func contains(_ value: Value) -> Bool {
+        return self.values.contains { $0 === value }
+    }
 }
 
 // MARK: - Vector Extensions
 extension SCNVector3 {
-    static func + (left: SCNVector3, right: SCNVector3) -> SCNVector3 {
+    static func +(left: SCNVector3, right: SCNVector3) -> SCNVector3 {
         return SCNVector3(left.x + right.x, left.y + right.y, left.z + right.z)
     }
     
-    static func * (left: SCNVector3, right: Float) -> SCNVector3 {
+    static func -(left: SCNVector3, right: SCNVector3) -> SCNVector3 {
+        return SCNVector3(left.x - right.x, left.y - right.y, left.z - right.z)
+    }
+    
+    static func *(left: SCNVector3, right: Float) -> SCNVector3 {
         return SCNVector3(left.x * right, left.y * right, left.z * right)
     }
     
-    mutating func add(_ vector: SCNVector3) {
-        self.x += vector.x
-        self.y += vector.y
-        self.z += vector.z
+    static func /(left: SCNVector3, right: Float) -> SCNVector3 {
+        return SCNVector3(left.x / right, left.y / right, left.z / right)
+    }
+    
+    static func +=(left: inout SCNVector3, right: SCNVector3) {
+        left = left + right
+    }
+    
+    func length() -> Float {
+        return sqrt(x * x + y * y + z * z)
+    }
+    
+    func normalized() -> SCNVector3 {
+        let len = length()
+        guard len > 0 else { return self }
+        return self / len
+    }
+    
+    func rotated(by quaternion: SCNQuaternion) -> SCNVector3 {
+        let qv = SCNVector3(quaternion.x, quaternion.y, quaternion.z)
+        let uv = qv.cross(self)
+        let uuv = qv.cross(uv)
+        return self + ((uv * 2.0 * quaternion.w) + (uuv * 2.0))
+    }
+    
+    func cross(_ vector: SCNVector3) -> SCNVector3 {
+        return SCNVector3(y * vector.z - z * vector.y,
+                         z * vector.x - x * vector.z,
+                         x * vector.y - y * vector.x)
+    }
+    
+    func dot(_ vector: SCNVector3) -> Float {
+        return x * vector.x + y * vector.y + z * vector.z
     }
 }
 

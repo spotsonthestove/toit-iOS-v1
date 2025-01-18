@@ -194,12 +194,48 @@ We'll track code as it changes and the issues and solutions as they are resolved
 - Added vector math extensions for SCNVector3 and SCNNode
 
 **Next Steps:**
-1. Implement node connection system (branches)
-2. Add visual feedback for node selection
-3. Implement branch updating during node movement
+1. Implement immediate branch updates during drag
+2. Refine branch endpoint calculations
+3. Consider using SCNConstraints for branch connections
+4. Add visual feedback for connection points
+5. Optimize physics body interactions
 
 **Technical Notes:**
-- Using SceneKit's hitTest for node selection
-- Camera-relative movement ensures consistent drag behavior regardless of view angle
-- Added dragSpeed parameter (0.01) that may need tuning for optimal feel
+- Consider caching normalized vectors
+- May need to adjust branch update frequency
+- Watch for performance impact of frequent updates
+- Consider adding debug visualization for connection points
+
+This comparison shows the Three.js implementation maintains better connection consistency through simpler vector math and immediate updates. The SceneKit implementation can be improved by following similar patterns while accounting for SceneKit's specific requirements around transforms and physics.
+
+### 2024-03-19 #17: Implemented Three.js-Inspired Branch Updates
+
+**Implementation:**
+1. Immediate Branch Updates:
+   - Direct position updates during drag operations
+   - Immediate branch geometry updates
+   - Bidirectional branch updates (parent and child connections)
+
+2. Precise Connection Points:
+   - Exact sphere surface intersection calculations
+   - Normalized direction vectors for accuracy
+   - Proper branch length calculations
+
+3. Performance Optimizations:
+   - Reduced update chain
+   - Direct node position updates
+   - Streamlined branch geometry updates
+
+**Technical Notes:**
+- Removed intermediate update steps
+- Added immediate branch updates during drag
+- Improved connection point precision
+- Maintained consistent branch orientations
+
+**Next Steps:**
+1. Test branch behavior during rapid node movement
+2. Consider adding visual feedback at connection points
+3. Implement branch animation for smoother transitions
+
+[Previous content remains exactly the same until the end of the file]
 
