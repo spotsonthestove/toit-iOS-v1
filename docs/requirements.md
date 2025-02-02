@@ -22,7 +22,7 @@ Functional Requirements
 	•	Add, remove, and modify nodes and branches dynamically.
 	4.	Performance:
 	•	Efficient rendering and transformation handling for up to a few thousand nodes and branches.
-	•	Use SceneKit’s GPU capabilities for smooth interactivity.
+	•	Use SceneKit's GPU capabilities for smooth interactivity.
 	5.	Integration:
 	•	Modular design to integrate the 3D engine with the rest of the application.
 	•	Export/import functionality for the mind map data structure.
@@ -30,28 +30,28 @@ Functional Requirements
 Non-Functional Requirements
 
 	1.	Usability:
-	•	Utilize SceneKit’s built-in physics for natural interaction
+	•	Utilize SceneKit's built-in physics for natural interaction
 	•	Leverage existing SCNView camera controls
 	2.	Portability:
-	•	Focus on iOS with SceneKit’s cross-platform capabilities
+	•	Focus on iOS with SceneKit's cross-platform capabilities
 	3.	Maintainability:
 	•	Maintain SwiftUI/SceneKit separation of concerns
 	•	Follow established SceneKit patterns and best practices
 	4.	Scalability:
-	•	Utilize SceneKit’s optimizations for larger mind maps
+	•	Utilize SceneKit's optimizations for larger mind maps
 	•	Implement proper node/branch management systems
 
 Key Components
 
 	1.	Scene Graph:
-	•	Utilize SceneKit’s built-in scene graph (SCNNode hierarchy) for managing nodes, branches, and their transformations.
+	•	Utilize SceneKit's built-in scene graph (SCNNode hierarchy) for managing nodes, branches, and their transformations.
 	2.	Renderer:
-	•	Leverage SceneKit’s rendering engine for nodes and branches.
+	•	Leverage SceneKit's rendering engine for nodes and branches.
 	•	Use SCNGeometry for efficient rendering of repeated objects (e.g., spheres for nodes).
 	3.	Input Handling:
 	•	Gesture-based interaction using SwiftUI gestures integrated with SceneKit.
 	4.	Math Utilities:
-	•	Use SceneKit’s built-in vector and matrix operations (SCNVector3, SCNMatrix4).
+	•	Use SceneKit's built-in vector and matrix operations (SCNVector3, SCNMatrix4).
 	5.	Utility Functions:
 	•	Debugging tools (e.g., axis visualizers as implemented in createAxes()).
 	•	Data import/export for mind maps.
@@ -79,7 +79,7 @@ Phase 2: Core Engine Development
 	•	Implement node creation and placement ✓
 	•	Develop branch geometry system using SCNCylinder or custom geometry
 	3.	Camera Controls:
-	•	Utilize SceneKit’s built-in camera controls ✓
+	•	Utilize SceneKit's built-in camera controls ✓
 	•	Enhance with custom camera behaviors as needed
 
 Phase 3: Interactivity
@@ -94,7 +94,7 @@ Phase 3: Interactivity
 Phase 4: Optimization
 
 	1.	GPU Optimization:
-	•	Use SceneKit’s optimizations for rendering nodes efficiently.
+	•	Use SceneKit's optimizations for rendering nodes efficiently.
 	•	Optimize shaders for performance on mobile devices.
 	2.	Testing:
 	•	Test with increasing numbers of nodes and branches to identify performance bottlenecks.
@@ -139,7 +139,7 @@ For your use case:
 
 Problem: Misalignment
 
-The misalignment likely arises from how local and world coordinates are computed and applied. Each object’s final position in 3D space is determined by combining its local transformation with its parent’s world transformation.
+The misalignment likely arises from how local and world coordinates are computed and applied. Each object's final position in 3D space is determined by combining its local transformation with its parent's world transformation.
 
 Core Requirements
 
@@ -291,4 +291,158 @@ Tools and Frameworks
         • Node synchronization
 
 This implementation leverages SceneKit's built-in functionality for efficient 3D rendering and physics, while maintaining a clean architecture for mind map specific features. The node-branch relationship is maintained through parent-child relationships in the scene graph, with automatic updates when nodes are moved.
+
+API Integration Requirements
+
+1. Authentication API
+    • Endpoint: `/api/auth`
+    • Authentication using Supabase through REST API
+    • Implementation example:
+    ```swift
+    struct AuthService {
+        static func signIn(email: String, password: String) async throws -> User {
+            let url = URL(string: "https://your-api.domain/api/auth")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            let body = ["email": email, "password": password]
+            request.httpBody = try JSONEncoder().encode(body)
+            
+            let (data, _) = try await URLSession.shared.data(for: request)
+            let response = try JSONDecoder().decode(AuthResponse.self, from: data)
+            return response.user
+        }
+    }
+    ```
+
+2. Mind Map Data API
+    • Endpoint: `/api/data`
+    • Requires Bearer token authentication
+    • Key operations:
+        - Fetch mind maps: GET
+        - Create mind maps: POST
+    • Implementation example:
+    ```swift
+    class MindMapService {
+        static func fetchMindMaps(token: String) async throws -> [MindMap] {
+            let url = URL(string: "https://your-api.domain/api/data")!
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            
+            let (data, _) = try await URLSession.shared.data(for: request)
+            let response = try JSONDecoder().decode(MindMapResponse.self, from: data)
+            return response.mindMaps
+        }
+        
+        static func createMindMap(token: String, mindMap: MindMap) async throws -> MindMap {
+            let url = URL(string: "https://your-api.domain/api/data")!
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            request.httpBody = try JSONEncoder().encode(mindMap)
+            
+            let (data, _) = try await URLSession.shared.data(for: request)
+            let response = try JSONDecoder().decode(CreateMindMapResponse.self, from: data)
+            return response.mindmap
+        }
+    }
+    ```
+
+3. Data Models
+    ```swift
+    struct MindMap: Codable {
+        let mindmap_id: String
+        let name: String
+        let description: String
+        let created_at: Date
+        let mindmap_nodes: [MindMapNode]
+    }
+
+    struct MindMapNode: Codable {
+        let node_id: String
+        let content: String
+        let x: Float
+        let y: Float
+        let z: Float
+        let parent_node_id: String?
+        let node_type: String
+    }
+
+    struct AuthResponse: Codable {
+        let user: User
+        let session: Session
+    }
+
+    struct CreateMindMapResponse: Codable {
+        let mindmap: MindMap
+    }
+    ```
+
+4. Error Handling
+    • Implement comprehensive error handling for API responses:
+    ```swift
+    enum APIError: Error {
+        case unauthorized
+        case networkError
+        case invalidData
+        case serverError(String)
+    }
+
+    extension MindMapService {
+        static func handleAPIError(_ statusCode: Int, data: Data) throws {
+            switch statusCode {
+            case 401:
+                throw APIError.unauthorized
+            case 500:
+                throw APIError.serverError(String(data: data, encoding: .utf8) ?? "Unknown error")
+            default:
+                throw APIError.networkError
+            }
+        }
+    }
+    ```
+
+5. Integration Requirements
+    • Implement proper token management and storage
+    • Handle authentication state
+    • Sync local changes with server
+    • Implement retry logic for failed requests
+    • Cache responses when appropriate
+
+6. Security Considerations
+    • Store authentication tokens securely using Keychain
+    • Implement certificate pinning for API requests
+    • Clear sensitive data on logout
+    • Example secure token storage:
+    ```swift
+    class SecureStorage {
+        static func saveToken(_ token: String) throws {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrAccount as String: "authToken",
+                kSecValueData as String: token.data(using: .utf8)!
+            ]
+            SecItemAdd(query as CFDictionary, nil)
+        }
+        
+        static func getToken() throws -> String? {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrAccount as String: "authToken",
+                kSecReturnData as String: true
+            ]
+            var result: AnyObject?
+            SecItemCopyMatching(query as CFDictionary, &result)
+            
+            guard let data = result as? Data,
+                  let token = String(data: data, encoding: .utf8) else {
+                return nil
+            }
+            return token
+        }
+    }
+    ```
 
