@@ -11,6 +11,7 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var items: [Item]
+    @State private var showingAuthTest = false
 
     var body: some View {
         TabView {
@@ -48,11 +49,14 @@ struct ContentView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        EditButton()
-                    }
-                    ToolbarItem {
                         Button(action: addItem) {
                             Label("Add Item", systemImage: "plus")
+                        }
+                    }
+                    
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button(action: { showingAuthTest = true }) {
+                            Label("Test Auth", systemImage: "key.fill")
                         }
                     }
                 }
@@ -62,6 +66,9 @@ struct ContentView: View {
             .tabItem {
                 Label("Items", systemImage: "list.bullet")
             }
+        }
+        .sheet(isPresented: $showingAuthTest) {
+            TestAuthView()
         }
     }
 

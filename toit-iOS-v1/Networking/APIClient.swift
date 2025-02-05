@@ -8,6 +8,7 @@ enum APIError: Error {
     case unauthorized
     case serverError(String)
     case decodingError(Error)
+    case httpError(Int)
 }
 
 /// Base API configuration
@@ -89,29 +90,35 @@ final class APIClient: APIClientProtocol {
     }
     
     private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+        let (data, response) = try await session.data(for: request)
+        
+        // Debug print to see raw response
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("API Response:", jsonString)
+        }
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        
+        // Check if status code is in the successful range (200-299)
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(httpResponse.statusCode)
+        }
+        
+        let decoder = JSONDecoder()
+        // decoder.keyDecodingStrategy = .convertFromSnakeCase // Remove this if using custom CodingKeys
+        
         do {
-            let (data, response) = try await session.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw APIError.invalidResponse
-            }
-            
-            switch httpResponse.statusCode {
-            case 200...299:
-                let decoder = JSONDecoder()
-                decoder.keyDecodingStrategy = .convertFromSnakeCase
-                return try decoder.decode(T.self, from: data)
-            case 401:
-                throw APIError.unauthorized
-            case 500...599:
-                throw APIError.serverError(String(data: data, encoding: .utf8) ?? "Unknown server error")
-            default:
-                throw APIError.invalidResponse
-            }
-        } catch let error as APIError {
-            throw error
+            // Try to decode directly first
+            return try decoder.decode(T.self, from: data)
         } catch {
-            throw APIError.networkError(error)
+            print("Decoding error:", error)
+            // If direct decoding fails, you might want to examine the raw response
+            if let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                print("Raw JSON structure:", json)
+            }
+            throw error
         }
     }
 } 

@@ -4,14 +4,38 @@ import Foundation
 struct User: Codable {
     let id: String
     let email: String
-    let createdAt: Date
+    let emailConfirmedAt: String?
+    let lastSignInAt: String?
+    let role: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case email
+        case emailConfirmedAt = "email_confirmed_at"
+        case lastSignInAt = "last_sign_in_at"
+        case role
+    }
 }
 
 struct Session: Codable {
-    let token: String
-    let expiresAt: Date
+    let accessToken: String
+    let tokenType: String
+    let expiresIn: Int
+    let expiresAt: Int
+    let refreshToken: String
+    let user: User
+    
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case tokenType = "token_type"
+        case expiresIn = "expires_in"
+        case expiresAt = "expires_at"
+        case refreshToken = "refresh_token"
+        case user
+    }
 }
 
+// This matches the exact structure of the Supabase response
 struct AuthResponse: Codable {
     let user: User
     let session: Session
