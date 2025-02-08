@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TestAuthView: View {
-    @StateObject private var viewModel = AuthViewModel()
+    @EnvironmentObject private var viewModel: AuthViewModel
     @State private var email = ""
     @State private var password = ""
     @Environment(\.dismiss) private var dismiss
@@ -58,10 +58,32 @@ struct TestAuthView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Close") {
-                        dismiss()
+                        if viewModel.isAuthenticated {
+                            dismiss()
+                        } else {
+                            // Only dismiss if they successfully logged in or explicitly cancel
+                            // This encourages them to complete the login flow
+                            let alert = UIAlertController(
+                                title: "Close without signing in?",
+                                message: "You need to sign in to view and manage your mind maps.",
+                                preferredStyle: .alert
+                            )
+                            
+                            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+                            alert.addAction(UIAlertAction(title: "Close", style: .destructive) { _ in
+                                dismiss()
+                            })
+                            
+                            UIApplication.shared.windows.first?.rootViewController?.present(alert, animated: true)
+                        }
                     }
                 }
             }
         }
     }
+}
+
+#Preview {
+    TestAuthView()
+        .environmentObject(AuthViewModel())
 } 

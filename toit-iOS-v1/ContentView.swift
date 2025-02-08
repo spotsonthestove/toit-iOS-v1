@@ -12,28 +12,41 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var items: [Item]
     @State private var showingAuthTest = false
+    @StateObject private var authViewModel = AuthViewModel()
 
     var body: some View {
         TabView {
             // Home Tab
-            VStack {
-                Text("Let's get a round toit!")
-                    .font(.largeTitle)
-                    .padding()
+            NavigationView {
+                VStack {
+                    Text("Let's get a round toit!")
+                        .font(.largeTitle)
+                        .padding()
+                }
+                .navigationTitle("Home")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: { showingAuthTest = true }) {
+                            Label("Account", systemImage: "key.fill")
+                        }
+                    }
+                }
             }
             .tabItem {
                 Label("Home", systemImage: "house.fill")
             }
             
-
+            // Mind Maps List Tab
+            MindMapListView()
+                .tabItem {
+                    Label("Mind Maps", systemImage: "list.bullet.clipboard")
+                }
             
             // Add SceneKit Mind Map Tab
             SceneKitMindMapView()
                 .tabItem {
                     Label("SceneKit", systemImage: "brain.head.profile")
                 }
-            
-  
             
             // Original Items List Tab
             NavigationSplitView {
@@ -53,12 +66,6 @@ struct ContentView: View {
                             Label("Add Item", systemImage: "plus")
                         }
                     }
-                    
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button(action: { showingAuthTest = true }) {
-                            Label("Test Auth", systemImage: "key.fill")
-                        }
-                    }
                 }
             } detail: {
                 Text("Select an item")
@@ -70,6 +77,7 @@ struct ContentView: View {
         .sheet(isPresented: $showingAuthTest) {
             TestAuthView()
         }
+        .environmentObject(authViewModel)
     }
 
     private func addItem() {

@@ -7,6 +7,7 @@ class AuthViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var user: User?
+    @Published var session: Session?
     
     private let authService: AuthServiceProtocol
     
@@ -22,6 +23,7 @@ class AuthViewModel: ObservableObject {
             do {
                 let response = try await authService.signIn(email: email, password: password)
                 self.user = response.user
+                self.session = response.session
                 self.isAuthenticated = true
                 // In a real app, you'd want to store the token securely
                 print("✅ Authentication successful")
@@ -37,6 +39,7 @@ class AuthViewModel: ObservableObject {
     func signOut() {
         isAuthenticated = false
         user = nil
+        session = nil
         error = nil
     }
 } 

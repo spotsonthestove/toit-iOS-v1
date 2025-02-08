@@ -67,6 +67,14 @@ struct MindMap: Codable, Identifiable {
     let description: String
     let createdAt: Date
     var nodes: [MindMapNode]
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case description
+        case createdAt = "created_at"
+        case nodes
+    }
 }
 
 struct CreateMindMapRequest: Codable {
@@ -77,8 +85,16 @@ struct CreateMindMapRequest: Codable {
 
 struct MindMapResponse: Codable {
     let mindmap: MindMap
+    
+    enum CodingKeys: String, CodingKey {
+        case mindmap = "mindMap"
+    }
 }
 
 struct MindMapsResponse: Codable {
     let mindmaps: [MindMap]
+    
+    enum CodingKeys: String, CodingKey {
+        case mindmaps = "mindMaps"
+    }
 } 
