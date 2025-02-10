@@ -49,7 +49,22 @@ final class MindMapService: MindMapServiceProtocol {
         }
         
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        // Configure date decoding strategy to handle PostgreSQL timestamp format
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            
+            if let date = formatter.date(from: dateString) {
+                return date
+            }
+            
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Expected date string to be ISO8601-formatted with fractional seconds."
+            )
+        }
         
         do {
             let mindMapsResponse = try decoder.decode(MindMapsResponse.self, from: data)

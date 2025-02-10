@@ -48,32 +48,36 @@ struct AuthRequest: Codable {
 
 // MARK: - Mind Map Models
 struct MindMapNode: Codable, Identifiable {
-    let id: String
+    let id: Int
     let content: String
-    var position: Position
-    let parentNodeId: String?
+    let x: Float
+    let y: Float
+    let z: Float
+    let parentNodeId: Int?
     let nodeType: String
     
-    struct Position: Codable {
-        let x: Float
-        let y: Float
-        let z: Float
+    enum CodingKeys: String, CodingKey {
+        case id = "node_id"
+        case content
+        case x, y, z
+        case parentNodeId = "parent_node_id"
+        case nodeType = "node_type"
     }
 }
 
 struct MindMap: Codable, Identifiable {
-    let id: String
+    let id: Int
     let name: String
     let description: String
     let createdAt: Date
-    var nodes: [MindMapNode]
+    let nodes: [MindMapNode]
     
     enum CodingKeys: String, CodingKey {
-        case id
+        case id = "mindmap_id"
         case name
         case description
         case createdAt = "created_at"
-        case nodes
+        case nodes = "mindmap_nodes"
     }
 }
 
