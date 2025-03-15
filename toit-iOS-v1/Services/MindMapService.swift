@@ -14,7 +14,7 @@ enum NetworkError: Error {
 
 final class MindMapService: MindMapServiceProtocol {
     private let apiClient: APIClientProtocol
-    private let baseURL = "https://toit-two.toit.workers.dev"  // Your API base URL
+    private let baseURL = "https://toitdoit.com"  // Your API base URL
     
     init(apiClient: APIClientProtocol = APIClient.shared) {
         self.apiClient = apiClient

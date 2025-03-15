@@ -19,6 +19,12 @@ struct ContentView: View {
             // Home Tab
             NavigationView {
                 VStack {
+                    Image("logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 150, height: 150)
+                        .padding()
+                    
                     Text("Let's get a round toit!")
                         .font(.largeTitle)
                         .padding()

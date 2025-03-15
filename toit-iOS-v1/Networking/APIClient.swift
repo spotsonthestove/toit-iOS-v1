@@ -13,7 +13,7 @@ enum APIError: Error {
 
 /// Base API configuration
 struct APIConfig {
-    static let baseURL = "https://toit-two.toit.workers.dev"
+    static let baseURL = "https://toitdoit.com"
     static let defaultHeaders = [
         "Content-Type": "application/json",
         "Accept": "application/json"

@@ -3,6 +3,7 @@ import SceneKit
 
 struct SceneKitMindMapView: View {
     @StateObject private var viewModel = SceneKitMindMapViewModel()
+    @State private var branchText = ""
     
     var body: some View {
         SceneKitView(viewModel: viewModel)
@@ -15,7 +16,16 @@ struct SceneKitMindMapView: View {
                             .cornerRadius(10)
                     }
                     
-                    Button(action: viewModel.connectSelectedNodes) {
+                    TextField("Branch Label", text: $branchText)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 120)
+                        .background(Color.white.opacity(0.7))
+                        .cornerRadius(10)
+                    
+                    Button(action: {
+                        viewModel.connectSelectedNodes(withLabel: branchText)
+                        branchText = "" // Clear the text field after connecting
+                    }) {
                         Label("Connect", systemImage: "link.circle.fill")
                             .padding()
                             .background(Color.green.opacity(0.7))
@@ -130,7 +140,7 @@ class SceneKitMindMapViewModel: ObservableObject {
     @Published private var nodePositions: [UUID: SCNVector3] = [:]
     @Published private var connections: [UUID: Set<UUID>] = [:]
     private var nodes: [UUID: SCNNode] = [:]
-    private var branches: [String: SCNNode] = [:]
+    private var branches: [String: (branch: SCNNode, text: SCNNode)] = [:]
     weak var sceneView: SCNView?
     
     // Track parent and child selection for connections
@@ -222,7 +232,7 @@ class SceneKitMindMapViewModel: ObservableObject {
         scene.rootNode.addChildNode(node)
     }
     
-    func connectSelectedNodes() {
+    func connectSelectedNodes(withLabel label: String) {
         guard let parent = parentNode, let child = childNode,
               let parentId = parent.value(forKey: "nodeId") as? UUID,
               let childId = child.value(forKey: "nodeId") as? UUID else { return }
@@ -230,20 +240,21 @@ class SceneKitMindMapViewModel: ObservableObject {
         // Store connection in our data structure
         connections[parentId, default: []].insert(childId)
         
-        createBranch(from: parent, to: child)
+        createBranch(from: parent, to: child, label: label)
         
         // Reset selections after connecting
         resetNodeSelections()
     }
     
-    private func createBranch(from parent: SCNNode, to child: SCNNode) {
+    private func createBranch(from parent: SCNNode, to child: SCNNode, label: String = "") {
         guard let parentId = parent.value(forKey: "nodeId") as? UUID,
               let childId = child.value(forKey: "nodeId") as? UUID else { return }
         
         let branchId = "\(parentId.uuidString)-\(childId.uuidString)"
         
         // Remove existing branch if any
-        branches[branchId]?.removeFromParentNode()
+        branches[branchId]?.branch.removeFromParentNode()
+        branches[branchId]?.text.removeFromParentNode()
         
         // Get node radius (assuming both nodes are spheres with same radius)
         let nodeRadius: Float = 0.5 // This should match the sphere radius we set in addNode()
@@ -273,8 +284,6 @@ class SceneKitMindMapViewModel: ObservableObject {
         branchNode.position = midPoint
         
         // Calculate rotation to align branch with direction
-        // By default, SCNCylinder is oriented along the y-axis
-        // We need to rotate it to align with our direction vector
         let up = SCNVector3(0, 1, 0) // Default cylinder orientation
         let rotationAxis = up.cross(normalizedDirection)
         let rotationAngle = acos(up.dot(normalizedDirection))
@@ -288,9 +297,29 @@ class SceneKitMindMapViewModel: ObservableObject {
             )
         }
         
-        // Store branch for future updates
-        branches[branchId] = branchNode
+        // Create and position text
+        let textGeometry = SCNText(string: label, extrusionDepth: 0.1)
+        textGeometry.font = UIFont.systemFont(ofSize: 1.0) // Adjust size as needed
+        textGeometry.firstMaterial?.diffuse.contents = UIColor.white
+        textGeometry.firstMaterial?.isDoubleSided = true
+        
+        let textNode = SCNNode(geometry: textGeometry)
+        
+        // Scale text to reasonable size
+        textNode.scale = SCNVector3(0.3, 0.3, 0.3)
+        
+        // Position text slightly above the branch
+        let textOffset = normalizedDirection.cross(SCNVector3(0, 1, 0)).normalized() * 0.3
+        textNode.position = midPoint + textOffset
+        
+        // Rotate text to face the camera
+        textNode.constraints = [SCNBillboardConstraint()]
+        
+        // Store branch and text for future updates
+        branches[branchId] = (branch: branchNode, text: textNode)
+        
         scene.rootNode.addChildNode(branchNode)
+        scene.rootNode.addChildNode(textNode)
     }
     
     private func updateBranchImmediate(parent: SCNNode, child: SCNNode) {
@@ -298,7 +327,7 @@ class SceneKitMindMapViewModel: ObservableObject {
               let childId = child.value(forKey: "nodeId") as? UUID else { return }
         
         let branchId = "\(parentId.uuidString)-\(childId.uuidString)"
-        guard let branchNode = branches[branchId] else { return }
+        guard let (branchNode, textNode) = branches[branchId] else { return }
         
         let nodeRadius: Float = 0.5
         
@@ -333,6 +362,10 @@ class SceneKitMindMapViewModel: ObservableObject {
                 rotationAngle
             )
         }
+        
+        // Update text position
+        let textOffset = normalizedDirection.cross(SCNVector3(0, 1, 0)).normalized() * 0.3
+        textNode.position = midPoint + textOffset
     }
     
     private func updateConnectedBranches(for node: SCNNode) {
